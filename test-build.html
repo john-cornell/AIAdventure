@@ -1,0 +1,179 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI Adventure - Build Test</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            background: #1a1a1a;
+            color: #ffffff;
+        }
+        .test-section {
+            background: #2a2a2a;
+            padding: 20px;
+            margin: 20px 0;
+            border-radius: 8px;
+            border: 1px solid #444;
+        }
+        .success { color: #4ade80; }
+        .error { color: #f87171; }
+        .warning { color: #fbbf24; }
+        button {
+            background: #3b82f6;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 4px;
+            cursor: pointer;
+            margin: 5px;
+        }
+        button:hover { background: #2563eb; }
+        pre {
+            background: #1f1f1f;
+            padding: 10px;
+            border-radius: 4px;
+            overflow-x: auto;
+        }
+    </style>
+</head>
+<body>
+    <h1>AI Adventure - Build Test</h1>
+    
+    <div class="test-section">
+        <h2>Module Loading Test</h2>
+        <div id="module-test-results"></div>
+    </div>
+
+    <div class="test-section">
+        <h2>Configuration Test</h2>
+        <button onclick="testConfig()">Test Configuration</button>
+        <div id="config-test-results"></div>
+    </div>
+
+    <div class="test-section">
+        <h2>Ollama Connection Test</h2>
+        <button onclick="testOllama()">Test Ollama Connection</button>
+        <div id="ollama-test-results"></div>
+    </div>
+
+    <div class="test-section">
+        <h2>Stable Diffusion Test</h2>
+        <button onclick="testSD()">Test SD Connection</button>
+        <div id="sd-test-results"></div>
+    </div>
+
+    <div class="test-section">
+        <h2>Game Logic Test</h2>
+        <button onclick="testGame()">Test Game Logic</button>
+        <div id="game-test-results"></div>
+    </div>
+
+    <script type="module">
+        // Import all modules
+        let configModule, ollamaModule, sdModule, gameModule;
+
+        async function loadModules() {
+            const results = document.getElementById('module-test-results');
+            
+            try {
+                // Test module imports
+                configModule = await import('./src/js/config.js');
+                results.innerHTML += '<div class="success">✅ Config module loaded successfully</div>';
+                
+                ollamaModule = await import('./src/js/ollama.js');
+                results.innerHTML += '<div class="success">✅ Ollama module loaded successfully</div>';
+                
+                sdModule = await import('./src/js/stable-diffusion.js');
+                results.innerHTML += '<div class="success">✅ Stable Diffusion module loaded successfully</div>';
+                
+                gameModule = await import('./src/js/game.js');
+                results.innerHTML += '<div class="success">✅ Game module loaded successfully</div>';
+                
+                results.innerHTML += '<div class="success">🎉 All modules loaded successfully!</div>';
+                
+            } catch (error) {
+                results.innerHTML += `<div class="error">❌ Module loading failed: ${error.message}</div>`;
+                console.error('Module loading error:', error);
+            }
+        }
+
+        // Make functions global for button access
+        window.testConfig = async function() {
+            const results = document.getElementById('config-test-results');
+            results.innerHTML = '<div class="warning">Testing configuration...</div>';
+            
+            try {
+                const config = configModule.loadConfig();
+                results.innerHTML = `
+                    <div class="success">✅ Configuration loaded successfully</div>
+                    <pre>${JSON.stringify(config, null, 2)}</pre>
+                `;
+            } catch (error) {
+                results.innerHTML = `<div class="error">❌ Configuration test failed: ${error.message}</div>`;
+            }
+        };
+
+        window.testOllama = async function() {
+            const results = document.getElementById('ollama-test-results');
+            results.innerHTML = '<div class="warning">Testing Ollama connection...</div>';
+            
+            try {
+                const config = configModule.loadConfig();
+                const testResult = await ollamaModule.testOllamaConnection(config.ollama.url, config.ollama.model);
+                
+                if (testResult.success) {
+                    results.innerHTML = `<div class="success">✅ ${testResult.message}</div>`;
+                } else {
+                    results.innerHTML = `<div class="error">❌ ${testResult.message}</div>`;
+                }
+            } catch (error) {
+                results.innerHTML = `<div class="error">❌ Ollama test failed: ${error.message}</div>`;
+            }
+        };
+
+        window.testSD = async function() {
+            const results = document.getElementById('sd-test-results');
+            results.innerHTML = '<div class="warning">Testing Stable Diffusion connection...</div>';
+            
+            try {
+                const config = configModule.loadConfig();
+                const testResult = await sdModule.testSDConnection(config.stableDiffusion.url, config.stableDiffusion.model);
+                
+                if (testResult.success) {
+                    results.innerHTML = `<div class="success">✅ ${testResult.message}</div>`;
+                } else {
+                    results.innerHTML = `<div class="error">❌ ${testResult.message}</div>`;
+                }
+            } catch (error) {
+                results.innerHTML = `<div class="error">❌ SD test failed: ${error.message}</div>`;
+            }
+        };
+
+        window.testGame = async function() {
+            const results = document.getElementById('game-test-results');
+            results.innerHTML = '<div class="warning">Testing game logic...</div>';
+            
+            try {
+                const gameState = gameModule.getGameState();
+                results.innerHTML = `
+                    <div class="success">✅ Game state retrieved successfully</div>
+                    <div>Current state: ${gameState.currentState}</div>
+                    <div>Story log entries: ${gameState.storyLog.length}</div>
+                    <div>Action log entries: ${gameState.actionLog.length}</div>
+                    <div>Memories: ${gameState.memories.length}</div>
+                `;
+            } catch (error) {
+                results.innerHTML = `<div class="error">❌ Game test failed: ${error.message}</div>`;
+            }
+        };
+
+        // Load modules when page loads
+        loadModules();
+    </script>
+</body>
+</html>

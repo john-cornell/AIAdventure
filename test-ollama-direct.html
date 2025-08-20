@@ -1,0 +1,206 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Direct Ollama Test</title>
+    <style>
+        body { font-family: Arial, sans-serif; padding: 20px; background: #1a1a1a; color: #fff; }
+        .result { margin: 10px 0; padding: 10px; background: #333; border-radius: 4px; }
+        .success { color: #4ade80; }
+        .error { color: #f87171; }
+        .info { color: #60a5fa; }
+        button { background: #3b82f6; color: white; border: none; padding: 10px 20px; border-radius: 4px; cursor: pointer; margin: 5px; }
+        pre { background: #1f1f1f; padding: 10px; border-radius: 4px; overflow-x: auto; font-size: 12px; }
+    </style>
+</head>
+<body>
+    <h1>Direct Ollama API Test</h1>
+    <button onclick="testOllamaDirectly()">Test Ollama Directly</button>
+    <div id="results"></div>
+
+    <script>
+        async function getAvailableModels() {
+            try {
+                const response = await fetch('http://localhost:11434/api/tags');
+                if (!response.ok) {
+                    throw new Error(`Failed to fetch models: ${response.status}`);
+                }
+                const data = await response.json();
+                return data.models || [];
+            } catch (error) {
+                console.error('Failed to get models:', error);
+                return [];
+            }
+        }
+
+        async function loadModel(model) {
+            try {
+                const response = await fetch('http://localhost:11434/api/generate', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        model: model,
+                        prompt: "Hi",
+                        stream: false,
+                        options: {
+                            temperature: 0.1,
+                            num_predict: 10
+                        }
+                    })
+                });
+                
+                if (!response.ok) return false;
+                const data = await response.json();
+                return data.done === true;
+            } catch (error) {
+                return false;
+            }
+        }
+
+        async function testOllamaDirectly() {
+            const results = document.getElementById('results');
+            results.innerHTML = '<div class="info">🔍 Starting comprehensive Ollama test...</div>';
+            
+            // Step 1: Get all available models
+            results.innerHTML += '<div class="info">📋 Fetching available models...</div>';
+            const modelData = await getAvailableModels();
+            
+            if (modelData.length === 0) {
+                results.innerHTML += '<div class="error">❌ No models found or Ollama not running</div>';
+                return;
+            }
+            
+            const modelNames = modelData.map(m => m.name);
+            results.innerHTML += `<div class="success">✅ Found ${modelNames.length} models: ${modelNames.join(', ')}</div>`;
+            
+            // Step 2: Sort models by preference (larger models first)
+            const sortedModels = modelNames.sort((a, b) => {
+                // Priority order: gpt-oss > 20b > 13b > 12b > latest > medium > 2b
+                const getModelScore = (name) => {
+                    if (name.includes('gpt-oss')) return 100;
+                    if (name.includes('20b')) return 90;
+                    if (name.includes('13b')) return 80;
+                    if (name.includes('12b')) return 70;
+                    if (name.includes('latest') && !name.includes('2b')) return 60;
+                    if (name.includes('medium')) return 50;
+                    if (name.includes('phi')) return 40;
+                    if (name.includes('2b')) return 30;
+                    return 20;
+                };
+                return getModelScore(b) - getModelScore(a);
+            });
+            
+            results.innerHTML += `<div class="info">🎯 Testing models in priority order: ${sortedModels.join(', ')}</div>`;
+            
+            let successCount = 0;
+            let failureCount = 0;
+            
+            // Step 3: Test each model
+            for (const model of sortedModels) {
+                results.innerHTML += `<div style="margin: 20px 0; padding: 15px; background: #2a2a2a; border-radius: 8px;">`;
+                results.innerHTML += `<div class="info"><strong>🧪 Testing model: ${model}</strong></div>`;
+                
+                try {
+                    // Sub-step 1: Load/warm up the model
+                    results.innerHTML += `<div class="info">🔄 Loading model...</div>`;
+                    const modelLoaded = await loadModel(model);
+                    
+                    if (!modelLoaded) {
+                        results.innerHTML += `<div class="error">❌ Failed to load model</div>`;
+                        failureCount++;
+                        results.innerHTML += `</div>`;
+                        continue;
+                    }
+                    
+                    results.innerHTML += `<div class="success">✅ Model loaded successfully</div>`;
+                    
+                    // Sub-step 2: Wait for initialization
+                    results.innerHTML += `<div class="info">⏳ Waiting for model initialization (2s)...</div>`;
+                    await new Promise(resolve => setTimeout(resolve, 2000));
+                    
+                    // Sub-step 3: Test generation
+                    results.innerHTML += `<div class="info">💬 Testing generation...</div>`;
+                    const testPrompt = "Hello! Please respond with a simple greeting and tell me your name.";
+                    
+                    const response = await fetch('http://localhost:11434/api/generate', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            model: model,
+                            prompt: testPrompt,
+                            stream: false,
+                            options: {
+                                temperature: 0.1,
+                                num_predict: 100,
+                                top_p: 1.0,
+                                top_k: 40
+                            }
+                        })
+                    });
+                    
+                    results.innerHTML += `<div class="info">📡 Response status: ${response.status}</div>`;
+                    
+                    if (!response.ok) {
+                        results.innerHTML += `<div class="error">❌ HTTP Error: ${response.status} ${response.statusText}</div>`;
+                        failureCount++;
+                        results.innerHTML += `</div>`;
+                        continue;
+                    }
+                    
+                    const data = await response.json();
+                    
+                    // Show compact raw response
+                    results.innerHTML += `<div class="info">📄 Raw response summary:</div>`;
+                    results.innerHTML += `<pre style="font-size: 10px; max-height: 150px; overflow-y: auto;">${JSON.stringify({
+                        model: data.model,
+                        done: data.done,
+                        done_reason: data.done_reason,
+                        response_length: data.response ? data.response.length : 0,
+                        response_preview: data.response ? data.response.substring(0, 100) + '...' : 'empty'
+                    }, null, 2)}</pre>`;
+                    
+                    // Check response
+                    if (!data.done) {
+                        results.innerHTML += `<div class="error">❌ Incomplete response from Ollama</div>`;
+                        failureCount++;
+                        results.innerHTML += `</div>`;
+                        continue;
+                    }
+                    
+                    const responseText = data.response ? data.response.trim() : '';
+                    
+                    if (!responseText) {
+                        results.innerHTML += `<div class="error">❌ Empty response content (done_reason: ${data.done_reason})</div>`;
+                        failureCount++;
+                        results.innerHTML += `</div>`;
+                        continue;
+                    }
+                    
+                    // Success!
+                    results.innerHTML += `<div class="success">🎉 SUCCESS! Model ${model} responded:</div>`;
+                    results.innerHTML += `<div style="background: #1f1f1f; padding: 10px; border-radius: 4px; margin: 5px 0; font-style: italic;">"${responseText}"</div>`;
+                    results.innerHTML += `<div class="info">⏱️ Response time: ${data.total_duration ? Math.round(data.total_duration / 1000000) + 'ms' : 'unknown'}</div>`;
+                    successCount++;
+                    
+                } catch (error) {
+                    results.innerHTML += `<div class="error">❌ Error: ${error.message}</div>`;
+                    failureCount++;
+                }
+                
+                results.innerHTML += `</div>`;
+            }
+            
+            // Final summary
+            results.innerHTML += `<div style="margin: 20px 0; padding: 15px; background: #333; border-radius: 8px; border-left: 4px solid #4ade80;">`;
+            results.innerHTML += `<div class="success"><strong>📊 Test Summary:</strong></div>`;
+            results.innerHTML += `<div class="success">✅ Successful models: ${successCount}/${sortedModels.length}</div>`;
+            results.innerHTML += `<div class="error">❌ Failed models: ${failureCount}/${sortedModels.length}</div>`;
+            if (successCount > 0) {
+                results.innerHTML += `<div class="success">🎯 Ready for adventure game development!</div>`;
+            } else {
+                results.innerHTML += `<div class="error">⚠️ No models are working properly. Check Ollama setup.</div>`;
+            }
+            results.innerHTML += `</div>`;
+        }
+    </script>
+</body>
+</html>

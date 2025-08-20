@@ -1,0 +1,144 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI Adventure Game</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        body {
+            background: linear-gradient(135deg, #1e3a8a 0%, #1e40af 50%, #3b82f6 100%);
+            min-height: 100vh;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        }
+        
+        /* Custom scrollbar */
+        ::-webkit-scrollbar {
+            width: 8px;
+        }
+        
+        ::-webkit-scrollbar-track {
+            background: #374151;
+        }
+        
+        ::-webkit-scrollbar-thumb {
+            background: #6b7280;
+            border-radius: 4px;
+        }
+        
+        ::-webkit-scrollbar-thumb:hover {
+            background: #9ca3af;
+        }
+        
+        /* Loading animation */
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+        
+        .animate-spin {
+            animation: spin 1s linear infinite;
+        }
+        
+        /* Fade animations */
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        
+        .animate-fade-in {
+            animation: fadeIn 0.3s ease-out;
+        }
+    </style>
+</head>
+<body>
+    <!-- Main Game Container -->
+    <div id="game-container" class="min-h-screen flex items-center justify-center">
+        <!-- Initial loading state -->
+        <div class="text-center text-white animate-fade-in">
+            <div class="animate-spin rounded-full h-12 w-12 border-b-2 border-white mx-auto mb-4"></div>
+            <h1 class="text-2xl font-bold mb-2">AI Adventure Game</h1>
+            <p class="text-gray-300">Loading...</p>
+        </div>
+    </div>
+
+    <!-- Game Scripts -->
+    <script type="module">
+        import { initializeUI } from './src/js/ui.js';
+        
+        console.log('🎮 AI Adventure Game - Starting...');
+        
+        // Initialize the game when DOM is ready
+        document.addEventListener('DOMContentLoaded', async () => {
+            try {
+                console.log('📦 Loading game modules...');
+                
+                // Initialize the game UI
+                await initializeUI();
+                
+                console.log('✅ Game initialized successfully!');
+                console.log('🎯 Ready to play!');
+                
+            } catch (error) {
+                console.error('❌ Failed to initialize game:', error);
+                
+                // Show error state
+                document.getElementById('game-container').innerHTML = `
+                    <div class="text-center text-white animate-fade-in">
+                        <div class="bg-red-900/50 border border-red-700 rounded-lg p-8 max-w-md">
+                            <h1 class="text-2xl font-bold mb-4 text-red-300">⚠️ Game Error</h1>
+                            <p class="text-red-200 mb-6">Failed to load the game. Please check your setup.</p>
+                            <div class="text-left text-sm text-red-300 mb-4">
+                                <p><strong>Error:</strong> ${error.message}</p>
+                            </div>
+                            <div class="space-y-2 text-sm text-gray-300">
+                                <p><strong>Make sure:</strong></p>
+                                <ul class="list-disc list-inside space-y-1 ml-4">
+                                    <li>Ollama is running on localhost:11434</li>
+                                    <li>Stable Diffusion is running on localhost:7860</li>
+                                    <li>You have at least one model loaded in Ollama</li>
+                                    <li>Your browser supports ES6 modules</li>
+                                </ul>
+                            </div>
+                            <button onclick="location.reload()" 
+                                    class="mt-6 bg-red-600 hover:bg-red-500 text-white px-6 py-2 rounded-lg transition-colors duration-300">
+                                🔄 Retry
+                            </button>
+                        </div>
+                    </div>
+                `;
+            }
+        });
+        
+        // Handle page visibility changes (pause/resume)
+        document.addEventListener('visibilitychange', () => {
+            if (document.hidden) {
+                console.log('⏸️ Game paused (page hidden)');
+            } else {
+                console.log('▶️ Game resumed (page visible)');
+            }
+        });
+        
+        // Handle beforeunload (save state if needed)
+        window.addEventListener('beforeunload', (e) => {
+            // Could save game state here if needed
+            console.log('💾 Page unloading...');
+        });
+        
+        // Global error handler
+        window.addEventListener('error', (e) => {
+            console.error('🌐 Global error:', e.error);
+        });
+        
+        window.addEventListener('unhandledrejection', (e) => {
+            console.error('🌐 Unhandled promise rejection:', e.reason);
+        });
+    </script>
+    
+    <!-- Game Info -->
+    <div class="fixed bottom-4 right-4 text-xs text-gray-400 opacity-50 hover:opacity-100 transition-opacity">
+        <div class="bg-black/20 rounded px-2 py-1">
+            AI Adventure v1.0.0
+        </div>
+    </div>
+</body>
+</html>

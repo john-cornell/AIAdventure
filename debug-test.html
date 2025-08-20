@@ -1,0 +1,289 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI Adventure - Debug Test</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 1000px;
+            margin: 0 auto;
+            padding: 20px;
+            background: #1a1a1a;
+            color: #ffffff;
+        }
+        .test-section {
+            background: #2a2a2a;
+            padding: 20px;
+            margin: 20px 0;
+            border-radius: 8px;
+            border: 1px solid #444;
+        }
+        .success { color: #4ade80; }
+        .error { color: #f87171; }
+        .warning { color: #fbbf24; }
+        .info { color: #60a5fa; }
+        button {
+            background: #3b82f6;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 4px;
+            cursor: pointer;
+            margin: 5px;
+        }
+        button:hover { background: #2563eb; }
+        pre {
+            background: #1f1f1f;
+            padding: 10px;
+            border-radius: 4px;
+            overflow-x: auto;
+            font-size: 12px;
+        }
+        .step {
+            margin: 10px 0;
+            padding: 10px;
+            background: #333;
+            border-radius: 4px;
+        }
+    </style>
+</head>
+<body>
+    <h1>AI Adventure - Debug Test</h1>
+    
+    <div class="test-section">
+        <h2>Ollama Debug Test</h2>
+        <button onclick="debugOllama()">Debug Ollama</button>
+        <div id="ollama-debug-results"></div>
+    </div>
+
+    <div class="test-section">
+        <h2>Stable Diffusion Debug Test</h2>
+        <button onclick="debugSD()">Debug SD</button>
+        <div id="sd-debug-results"></div>
+    </div>
+
+    <script type="module">
+        let configModule;
+
+        async function loadConfig() {
+            try {
+                configModule = await import('./src/js/config.js');
+                return configModule.loadConfig();
+            } catch (error) {
+                console.error('Failed to load config:', error);
+                throw error;
+            }
+        }
+
+        // Make functions global for button access
+        window.debugOllama = async function() {
+            const results = document.getElementById('ollama-debug-results');
+            results.innerHTML = '<div class="info">🔍 Starting Ollama debug...</div>';
+            
+            try {
+                const config = await loadConfig();
+                results.innerHTML += `<div class="info">📋 Config loaded: ${config.ollama.url}, Model: ${config.ollama.model}</div>`;
+                
+                // Step 1: Test basic connectivity
+                results.innerHTML += '<div class="step">Step 1: Testing basic connectivity...</div>';
+                const healthResponse = await fetch(`${config.ollama.url}/api/tags`, {
+                    method: 'GET',
+                    headers: { 'Accept': 'application/json' }
+                });
+                
+                results.innerHTML += `<div class="info">📡 Health check: ${healthResponse.status} ${healthResponse.statusText}</div>`;
+                
+                if (!healthResponse.ok) {
+                    results.innerHTML += `<div class="error">❌ Health check failed</div>`;
+                    return;
+                }
+                
+                // Step 2: Get models
+                results.innerHTML += '<div class="step">Step 2: Fetching models...</div>';
+                const modelsData = await healthResponse.json();
+                results.innerHTML += `<div class="success">✅ Models: ${modelsData.models?.map(m => m.name).join(', ')}</div>`;
+                
+                // Step 3: Load model first (warm-up)
+                results.innerHTML += '<div class="step">Step 3: Loading model...</div>';
+                const loadResponse = await fetch(`${config.ollama.url}/api/generate`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        model: config.ollama.model,
+                        prompt: "Hi",
+                        stream: false,
+                        options: {
+                            temperature: 0.1,
+                            num_predict: 10
+                        }
+                    })
+                });
+                
+                if (!loadResponse.ok) {
+                    results.innerHTML += `<div class="error">❌ Failed to load model</div>`;
+                    return;
+                }
+                
+                const loadData = await loadResponse.json();
+                if (!loadData.done) {
+                    results.innerHTML += `<div class="error">❌ Model loading incomplete</div>`;
+                    return;
+                }
+                
+                results.innerHTML += `<div class="success">✅ Model loaded successfully</div>`;
+                
+                // Step 4: Wait for initialization
+                results.innerHTML += '<div class="step">Step 4: Waiting for model initialization...</div>';
+                await new Promise(resolve => setTimeout(resolve, 2000));
+                
+                // Step 5: Test generation
+                results.innerHTML += '<div class="step">Step 5: Testing generation...</div>';
+                const testPrompt = "Hello! Please respond with a simple greeting.";
+                
+                results.innerHTML += `<div class="info">📝 Sending prompt: "${testPrompt}"</div>`;
+                
+                const generateResponse = await fetch(`${config.ollama.url}/api/generate`, {
+                    method: 'POST',
+                    headers: { 
+                        'Content-Type': 'application/json',
+                        'Accept': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        model: config.ollama.model,
+                        prompt: testPrompt, // Use 'prompt' instead of 'messages'
+                        stream: false,
+                        options: {
+                            temperature: 0.1,
+                            num_predict: 100,
+                            top_p: 1.0,
+                            top_k: 40
+                        }
+                    })
+                });
+                
+                results.innerHTML += `<div class="info">📡 Generate response: ${generateResponse.status} ${generateResponse.statusText}</div>`;
+                
+                if (!generateResponse.ok) {
+                    const errorText = await generateResponse.text();
+                    results.innerHTML += `<div class="error">❌ Generate failed: ${errorText}</div>`;
+                    return;
+                }
+                
+                const generateData = await generateResponse.json();
+                results.innerHTML += `<div class="info">📄 Raw response:</div>`;
+                results.innerHTML += `<pre>${JSON.stringify(generateData, null, 2)}</pre>`;
+                
+                if (!generateData.done) {
+                    results.innerHTML += `<div class="error">❌ Incomplete response from Ollama</div>`;
+                    return;
+                }
+                
+                if (!generateData.response || generateData.response.trim() === '') {
+                    results.innerHTML += `<div class="error">❌ Empty response content (done_reason: ${generateData.done_reason})</div>`;
+                    return;
+                }
+                
+                results.innerHTML += `<div class="success">✅ Response received: ${generateData.response.substring(0, 100)}...</div>`;
+                results.innerHTML += `<div class="success">🎉 Ollama test successful!</div>`;
+                
+            } catch (error) {
+                results.innerHTML += `<div class="error">❌ Debug failed: ${error.message}</div>`;
+                console.error('Ollama debug error:', error);
+            }
+        };
+
+        window.debugSD = async function() {
+            const results = document.getElementById('sd-debug-results');
+            results.innerHTML = '<div class="info">🔍 Starting SD debug...</div>';
+            
+            try {
+                const config = await loadConfig();
+                results.innerHTML += `<div class="info">📋 Config loaded: ${config.stableDiffusion.url}</div>`;
+                
+                // Step 1: Test basic connectivity
+                results.innerHTML += '<div class="step">Step 1: Testing basic connectivity...</div>';
+                const healthResponse = await fetch(`${config.stableDiffusion.url}/`, {
+                    method: 'GET',
+                    headers: { 'Accept': 'text/html' }
+                });
+                
+                results.innerHTML += `<div class="info">📡 Health check: ${healthResponse.status} ${healthResponse.statusText}</div>`;
+                
+                if (!healthResponse.ok) {
+                    results.innerHTML += `<div class="error">❌ Health check failed</div>`;
+                    return;
+                }
+                
+                // Step 2: Test API endpoint
+                results.innerHTML += '<div class="step">Step 2: Testing API endpoint...</div>';
+                const apiResponse = await fetch(`${config.stableDiffusion.url}/sdapi/v1/sd-models`, {
+                    method: 'GET',
+                    headers: { 
+                        'Accept': 'application/json',
+                        'Content-Type': 'application/json'
+                    }
+                });
+                
+                results.innerHTML += `<div class="info">📡 API check: ${apiResponse.status} ${apiResponse.statusText}</div>`;
+                
+                if (!apiResponse.ok) {
+                    const errorText = await apiResponse.text();
+                    results.innerHTML += `<div class="error">❌ API failed: ${errorText}</div>`;
+                    return;
+                }
+                
+                // Step 3: Get models
+                results.innerHTML += '<div class="step">Step 3: Fetching models...</div>';
+                const modelsData = await apiResponse.json();
+                results.innerHTML += `<div class="success">✅ Models: ${modelsData.map(m => m.model_name).join(', ')}</div>`;
+                
+                // Step 4: Test generation
+                results.innerHTML += '<div class="step">Step 4: Testing generation...</div>';
+                const testPrompt = "a simple red circle on white background";
+                
+                results.innerHTML += `<div class="info">📝 Sending prompt: "${testPrompt}"</div>`;
+                
+                const generateResponse = await fetch(`${config.stableDiffusion.url}/sdapi/v1/txt2img`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        prompt: testPrompt,
+                        negative_prompt: "blurry, low quality",
+                        steps: 5,
+                        cfg_scale: 7,
+                        width: 64,
+                        height: 64,
+                        sampler_name: "Euler a",
+                        batch_size: 1
+                    })
+                });
+                
+                results.innerHTML += `<div class="info">📡 Generate response: ${generateResponse.status} ${generateResponse.statusText}</div>`;
+                
+                if (!generateResponse.ok) {
+                    const errorText = await generateResponse.text();
+                    results.innerHTML += `<div class="error">❌ Generate failed: ${errorText}</div>`;
+                    return;
+                }
+                
+                const generateData = await generateResponse.json();
+                results.innerHTML += `<div class="success">✅ Images received: ${generateData.images?.length || 0}</div>`;
+                
+                if (!generateData.images || generateData.images.length === 0) {
+                    results.innerHTML += `<div class="error">❌ No images in response</div>`;
+                    results.innerHTML += `<pre>${JSON.stringify(generateData, null, 2)}</pre>`;
+                    return;
+                }
+                
+                results.innerHTML += `<div class="success">🎉 SD test successful! Image size: ${generateData.images[0].length} bytes</div>`;
+                
+            } catch (error) {
+                results.innerHTML += `<div class="error">❌ Debug failed: ${error.message}</div>`;
+                console.error('SD debug error:', error);
+            }
+        };
+    </script>
+</body>
+</html>
