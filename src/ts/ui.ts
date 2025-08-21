@@ -632,6 +632,9 @@ function createDatabaseOverlayHTML(): string {
                         <button id="db-tab-current-game" class="db-tab-button py-2 px-1 border-b-2 border-transparent text-gray-400 hover:text-gray-300 font-medium">
                             🎮 Current Game
                         </button>
+                        <button id="db-tab-story-management" class="db-tab-button py-2 px-1 border-b-2 border-transparent text-gray-400 hover:text-gray-300 font-medium">
+                            📚 Story Management
+                        </button>
                     </nav>
                 </div>
                 
@@ -663,6 +666,30 @@ function createDatabaseOverlayHTML(): string {
                             <h3 class="text-lg font-semibold text-white mb-4">Current Game Data</h3>
                             <div id="current-game-data" class="text-sm text-gray-300 font-mono bg-gray-900 p-4 rounded border border-gray-600 max-h-96 overflow-y-auto">
                                 Loading current game data...
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Story Management Tab -->
+                    <div id="db-tab-content-story-management" class="db-tab-content hidden">
+                        <div class="p-4 bg-gray-800 rounded-lg border border-gray-600">
+                            <h3 class="text-lg font-semibold text-white mb-4">Story Management</h3>
+                            <div class="mb-4">
+                                <label class="block text-sm font-medium text-gray-300 mb-2">Select Session:</label>
+                                <select id="story-session-selector" class="w-full bg-gray-700 border border-gray-600 rounded-lg px-3 py-2 text-white">
+                                    <option value="">Loading sessions...</option>
+                                </select>
+                            </div>
+                            <div class="mb-4">
+                                <button id="load-story-steps" class="bg-blue-600 hover:bg-blue-500 text-white px-4 py-2 rounded-lg mr-2">
+                                    📖 Load Story Steps
+                                </button>
+                                <button id="delete-story-steps" class="bg-red-600 hover:bg-red-500 text-white px-4 py-2 rounded-lg">
+                                    🗑️ Delete Story Steps
+                                </button>
+                            </div>
+                            <div id="story-steps-container" class="text-sm text-gray-300 font-mono bg-gray-900 p-4 rounded border border-gray-600 max-h-96 overflow-y-auto">
+                                Select a session to view story steps...
                             </div>
                         </div>
                     </div>
@@ -3093,6 +3120,139 @@ function formatCurrentGameData(gameData: any, gameState: any): string {
             ${formatConfigData(gameData.configs)}
         </div>
     `;
+}
+
+/**
+ * Format story steps data for display
+ */
+function formatStoryStepsData(steps: any[], showDeleteButtons: boolean = false): string {
+    if (steps.length === 0) {
+        return '<span class="text-gray-500">No story steps found</span>';
+    }
+    
+    return steps.map(step => `
+        <div class="mb-4 p-3 bg-gray-800 rounded border border-gray-600">
+            <div class="font-semibold text-blue-400">Step ${step.step_number}</div>
+            <div class="text-green-400">Choice: ${step.choice}</div>
+            <div class="text-yellow-400">Outcome: ${step.outcome}</div>
+            <div class="text-yellow-400">Timestamp: ${new Date(step.timestamp).toLocaleString()}</div>
+            <div class="mt-2 text-xs text-gray-400">
+                <details>
+                    <summary class="cursor-pointer hover:text-gray-300">View Story Content</summary>
+                    <div class="mt-2 p-2 bg-gray-900 rounded max-h-32 overflow-y-auto">
+                        <div class="mb-2"><strong>Story:</strong> ${step.story_text}</div>
+                        <div class="mb-2"><strong>Image Prompt:</strong> ${step.image_prompt}</div>
+                        <div class="mb-2"><strong>Choices:</strong> ${step.choices.join(', ')}</div>
+                        <div class="mb-2"><strong>New Memories:</strong> ${step.new_memories.join(', ')}</div>
+                    </div>
+                </details>
+            </div>
+        </div>
+    `).join('');
+}
+
+/**
+ * Load and display story steps for a session
+ */
+async function loadAndDisplayStorySteps(sessionId: string): Promise<void> {
+    try {
+        const { loadStorySteps } = await import('./database.js');
+        const steps = await loadStorySteps(sessionId);
+        
+        const stepsContainer = document.getElementById('story-steps-container');
+        if (stepsContainer) {
+            stepsContainer.innerHTML = formatStoryStepsData(steps, true);
+        }
+    } catch (error) {
+        console.error('Error loading story steps:', error);
+        showMessage('Error loading story steps', 'error');
+    }
+}
+
+/**
+ * Delete story steps for a session
+ */
+async function deleteStorySteps(sessionId: string): Promise<void> {
+    try {
+        const { deleteStorySteps } = await import('./database.js');
+        const success = await deleteStorySteps(sessionId);
+        
+        if (success) {
+            showMessage(`Story steps for session ${sessionId} deleted successfully`, 'success');
+            refreshDatabaseData();
+        } else {
+            showMessage(`Failed to delete story steps for session ${sessionId}`, 'error');
+        }
+    } catch (error) {
+        console.error('Error deleting story steps:', error);
+        showMessage('Error deleting story steps', 'error');
+    }
+}
+
+/**
+ * Load story sessions into the selector
+ */
+async function loadStorySessions(): Promise<void> {
+    try {
+        const { getAllStoryStepSessions } = await import('./database.js');
+        const sessions = await getAllStoryStepSessions();
+        
+        const selector = document.getElementById('story-session-selector') as HTMLSelectElement;
+        if (selector) {
+            selector.innerHTML = '<option value="">Select a session...</option>';
+            sessions.forEach(sessionId => {
+                const option = document.createElement('option');
+                option.value = sessionId;
+                option.textContent = sessionId;
+                selector.appendChild(option);
+            });
+        }
+    } catch (error) {
+        console.error('Error loading story sessions:', error);
+        showMessage('Error loading story sessions', 'error');
+    }
+}
+
+/**
+ * Setup story management event handlers
+ */
+function setupStoryManagementHandlers(): void {
+    // Load story steps button
+    const loadButton = document.getElementById('load-story-steps');
+    if (loadButton) {
+        loadButton.addEventListener('click', async () => {
+            const selector = document.getElementById('story-session-selector') as HTMLSelectElement;
+            const sessionId = selector?.value;
+            
+            if (sessionId) {
+                await loadAndDisplayStorySteps(sessionId);
+            } else {
+                showMessage('Please select a session first', 'error');
+            }
+        });
+    }
+    
+    // Delete story steps button
+    const deleteButton = document.getElementById('delete-story-steps');
+    if (deleteButton) {
+        deleteButton.addEventListener('click', async () => {
+            const selector = document.getElementById('story-session-selector') as HTMLSelectElement;
+            const sessionId = selector?.value;
+            
+            if (sessionId) {
+                if (confirm(`Are you sure you want to delete all story steps for session ${sessionId}? This action cannot be undone.`)) {
+                    await deleteStorySteps(sessionId);
+                    // Clear the steps display
+                    const stepsContainer = document.getElementById('story-steps-container');
+                    if (stepsContainer) {
+                        stepsContainer.innerHTML = 'Story steps deleted...';
+                    }
+                }
+            } else {
+                showMessage('Please select a session first', 'error');
+            }
+        });
+    }
 }
 
 /**

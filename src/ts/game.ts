@@ -12,7 +12,7 @@ import { generateLocalImageWithRetry, generateLocalImageWithFaceRestoration, isF
 import { loadConfig, saveConfig } from './config.js';
 import { logInfo, logWarn, logError, logDebug } from './logger.js';
 import { generateUUID, generateTitleFromPrompt } from './uuid.js';
-import { saveStorySummary, loadStorySummary } from './database.js';
+import { saveStorySummary, loadStorySummary, saveStoryStep } from './database.js';
 
 // Game state
 let gameState: GameState = {
@@ -44,22 +44,33 @@ const systemPrompt = `You are an expert storyteller creating an interactive adve
 {
   "story": "A vivid, engaging description of the current scene and what happens next",
   "image_prompt": "A detailed visual description for generating an image of this scene",
-  "choices": ["Choice 1", "Choice 2", "Choice 3"],
+  "choices": ["Choice 1", "Choice 2", "Choice 3", "Choice 4"],
   "ambience_prompt": "A brief description of the ambient sounds/music for this scene",
   "new_memories": ["Important memory 1", "Important memory 2"]
 }
 
-IMPORTANT: The user's action will sometimes be prefixed with an [Outcome: ...]. You MUST respect this outcome in your generated story.
-- [Outcome: Success]: The user's action succeeds fully and as intended.
-- [Outcome: Partial Success]: The user's action succeeds, but with an unexpected twist, complication, or partial result.
-- [Outcome: Failure]: The user's action fails, possibly with a negative consequence.
-- If there is no outcome prefix, treat the input as the story's starting point or a neutral narrative progression.
+CRITICAL INSTRUCTIONS:
+1. The user's command/action is the PRIMARY driver of what happens next
+2. ALWAYS respond directly to what the user wants to do
+3. The user's action will sometimes be prefixed with an [Outcome: ...]. You MUST respect this outcome in your generated story.
+   - [Outcome: Success]: The user's action succeeds fully and as intended.
+   - [Outcome: Partial Success]: The user's action succeeds, but with an unexpected twist, complication, or partial result.
+   - [Outcome: Failure]: The user's action fails, possibly with a negative consequence.
+   - If there is no outcome prefix, treat the input as the story's starting point or a neutral narrative progression.
 
-Keep the story engaging, descriptive, and responsive to player choices. The story should be immersive and allow for meaningful player agency.`;
+4. Use the provided context (summary, recent steps, memories) to inform your response, but the user's command takes priority
+5. Keep the story engaging, descriptive, and responsive to player choices
+6. The story should be immersive and allow for meaningful player agency
+
+REMEMBER: The user's command is what drives the story forward. Respond to it directly and meaningfully.`;
 
 // Context management settings
 const CONTEXT_WARNING_THRESHOLD = 0.8; // 80% of context limit
 const CONTEXT_SUMMARY_THRESHOLD = 0.85; // 85% of context limit
+
+// Repetition detection settings
+const MAX_REPEATED_STEPS = 2; // Maximum number of repeated steps before summarizing
+const MAX_REPEATED_CHOICES = 2; // Maximum number of repeated choice patterns
 
 /**
  * Initialize context management
@@ -76,6 +87,121 @@ async function initializeContextManagement(): Promise<void> {
     } catch (error) {
         console.warn('⚠️ Context limit detection failed:', error);
     }
+}
+
+/**
+ * Detect repetitive story steps
+ */
+function detectRepetitiveSteps(): boolean {
+    if (gameState.storyLog.length < 3) return false;
+    
+    // Check last 3 story entries for repetition
+    const recentSteps = gameState.storyLog.slice(-3);
+    const stepTexts = recentSteps.map(step => step.story.toLowerCase().trim());
+    
+    // Check if any step text is repeated more than MAX_REPEATED_STEPS times
+    const textCounts = new Map<string, number>();
+    stepTexts.forEach(text => {
+        textCounts.set(text, (textCounts.get(text) || 0) + 1);
+    });
+    
+    for (const [text, count] of textCounts) {
+        if (count > MAX_REPEATED_STEPS) {
+            logWarn('Game', `Detected ${count} repeated story steps: "${text.substring(0, 100)}..."`);
+            return true;
+        }
+    }
+    
+    return false;
+}
+
+/**
+ * Detect repetitive choice patterns
+ */
+function detectRepetitiveChoices(): boolean {
+    if (gameState.storyLog.length < 3) return false;
+    
+    // Check last 3 story entries for repetitive choices
+    const recentSteps = gameState.storyLog.slice(-3);
+    const choicePatterns = recentSteps.map(step => 
+        step.choices.sort().join('|').toLowerCase()
+    );
+    
+    // Check if choice patterns are repeated
+    const patternCounts = new Map<string, number>();
+    choicePatterns.forEach(pattern => {
+        patternCounts.set(pattern, (patternCounts.get(pattern) || 0) + 1);
+    });
+    
+    for (const [pattern, count] of patternCounts) {
+        if (count > MAX_REPEATED_CHOICES) {
+            logWarn('Game', `Detected ${count} repeated choice patterns`);
+            return true;
+        }
+    }
+    
+    // Also check for repetitive player actions
+    if (gameState.actionLog.length >= 3) {
+        const recentActions = gameState.actionLog.slice(-3);
+        const actionTexts = recentActions.map(action => action.choice.toLowerCase().trim());
+        
+        const actionCounts = new Map<string, number>();
+        actionTexts.forEach(action => {
+            actionCounts.set(action, (actionCounts.get(action) || 0) + 1);
+        });
+        
+        for (const [action, count] of actionCounts) {
+            if (count > MAX_REPEATED_STEPS) {
+                logWarn('Game', `Detected ${count} repeated player actions: "${action}"`);
+                return true;
+            }
+        }
+    }
+    
+    return false;
+}
+
+/**
+ * Check if we should summarize due to repetition
+ */
+function shouldSummarizeDueToRepetition(): boolean {
+    return detectRepetitiveSteps() || detectRepetitiveChoices();
+}
+
+/**
+ * Create a repetition-aware system prompt
+ */
+function getRepetitionAwareSystemPrompt(): string {
+    const basePrompt = systemPrompt;
+    
+    if (shouldSummarizeDueToRepetition()) {
+        return `${basePrompt}
+
+REPETITION DETECTED - BREAK THE LOOP:
+1. Summarize the recent events briefly
+2. Introduce a significant change or new direction
+3. Provide fresh, different choices
+4. Move the story forward in a meaningful way
+5. RESPOND DIRECTLY TO THE USER'S COMMAND with new developments
+
+Avoid repeating similar scenarios or choices. The user's command should drive the story in a new direction.`;
+    }
+    
+    return basePrompt;
+}
+
+/**
+ * Create a summary of recent events when repetition is detected
+ */
+function createRepetitionSummary(): string {
+    if (gameState.storyLog.length < 3) return '';
+    
+    const recentSteps = gameState.storyLog.slice(-3);
+    const summary = recentSteps.map((step, index) => 
+        `Step ${gameState.storyLog.length - 2 + index}: ${step.story.substring(0, 100)}...`
+    ).join('\n');
+    
+    return `Recent events summary:\n${summary}\n\nTime to move the story forward with new developments.`;
 }
 
 /**
@@ -420,7 +546,16 @@ export async function executeLLMCall(retries: number = 3): Promise<void> {
 
     try {
         logDebug('Game', 'Calling callLocalLLMWithRetry...');
-        const response = await callLocalLLMWithRetry(systemPrompt, gameState.messageHistory, jsonFields, retries);
+        
+        // Check for repetition and get appropriate system prompt
+        const repetitionDetected = shouldSummarizeDueToRepetition();
+        const currentSystemPrompt = getRepetitionAwareSystemPrompt();
+        
+        if (repetitionDetected) {
+            logWarn('Game', 'Repetition detected - using enhanced system prompt to break the loop');
+        }
+        
+        const response = await callLocalLLMWithRetry(currentSystemPrompt, gameState.messageHistory, jsonFields, retries);
         logInfo('Game', 'Received LLM response', response);
         
         if (response && response.story) {
@@ -447,6 +582,36 @@ export async function executeLLMCall(retries: number = 3): Promise<void> {
                 gameState.memories.push(...newMemories);
                 // Keep only last 10 memories
                 gameState.memories = gameState.memories.slice(-10);
+            }
+
+            // Save story step to database
+            if (gameState.sessionId && gameState.actionLog.length > 0) {
+                try {
+                    const config = await loadConfig();
+                    if (config.database.saveStorySteps) {
+                        const lastAction = gameState.actionLog[gameState.actionLog.length - 1];
+                        const stepNumber = gameState.storyLog.length;
+                        
+                        await saveStoryStep(
+                            gameState.sessionId,
+                            stepNumber,
+                            storyEntry.id,
+                            lastAction.choice,
+                            lastAction.outcome || 'Unknown',
+                            response.story,
+                            response.image_prompt,
+                            response.choices,
+                            response.ambience_prompt,
+                            newMemories,
+                            storyEntry.timestamp,
+                            storyEntry.imageData
+                        );
+                        logInfo('Game', `Story step ${stepNumber} saved to database`);
+                    }
+                } catch (error) {
+                    logError('Game', 'Failed to save story step to database', error);
+                    // Don't fail the game for step save errors
+                }
             }
 
             // Update story summary in database
@@ -576,32 +741,47 @@ export async function updateGame(choice: string): Promise<void> {
     if (gameState.messageHistory.length > 0) {
         finalChoice = `[Outcome: ${outcome}] ${choice}`;
     }
+    
+    // Add repetition summary if detected
+    if (shouldSummarizeDueToRepetition()) {
+        const repetitionSummary = createRepetitionSummary();
+        finalChoice = `${finalChoice}\n\n[Repetition Detected: ${repetitionSummary}]`;
+        logInfo('Game', 'Added repetition summary to user choice');
+    }
 
-    // Build enhanced choice with context
+    // Build enhanced choice with context in priority order
     let enhancedChoice = finalChoice;
     
-    // Add memories context
+    // 1. STORY SUMMARY FIRST (always include for context)
+    const storySummaryContext = await getStorySummaryContext();
+    if (storySummaryContext) {
+        enhancedChoice = `${storySummaryContext}\n\n${enhancedChoice}`;
+        logInfo('Game', `Added story summary context (${storySummaryContext.length} chars)`);
+        logDebug('Game', `Story summary content: ${storySummaryContext.substring(0, 200)}...`);
+    } else {
+        logDebug('Game', 'No story summary context available');
+    }
+    
+    // 2. RECENT STORY STEPS (last 2-3 steps for immediate context)
+    if (gameState.storyLog.length > 0) {
+        const recentSteps = gameState.storyLog.slice(-2);
+        const stepsContext = recentSteps.map((step, index) => 
+            `Step ${gameState.storyLog.length - 1 + index}: ${step.story.substring(0, 150)}...`
+        ).join('\n');
+        
+        enhancedChoice = `Recent Story Steps:\n${stepsContext}\n\n${enhancedChoice}`;
+        logDebug('Game', `Added recent steps context (${stepsContext.length} chars)`);
+    }
+    
+    // 3. MEMORIES CONTEXT
     const memoriesContext = getMemoriesContext();
     if (memoriesContext) {
-        enhancedChoice = `${memoriesContext} ${enhancedChoice}`;
+        enhancedChoice = `${memoriesContext}\n\n${enhancedChoice}`;
         logDebug('Game', `Added memories context: ${memoriesContext}`);
     }
     
-    // Add story summary context (only occasionally to avoid overwhelming the LLM)
-    // Add it every 5th action or when the story is getting long
-    const shouldAddSummary = gameState.actionLog.length % 5 === 0 || gameState.messageHistory.length > 20;
-    if (shouldAddSummary) {
-        const storySummaryContext = await getStorySummaryContext();
-        if (storySummaryContext) {
-            enhancedChoice = `${storySummaryContext} ${enhancedChoice}`;
-            logInfo('Game', `Added story summary context (${storySummaryContext.length} chars)`);
-            logDebug('Game', `Story summary content: ${storySummaryContext.substring(0, 200)}...`);
-        } else {
-            logDebug('Game', 'No story summary context available');
-        }
-    } else {
-        logDebug('Game', 'Skipping story summary context to avoid LLM overload');
-    }
+    // 4. EMPHASIZE USER COMMAND (add at the end with strong emphasis)
+    enhancedChoice = `${enhancedChoice}\n\nIMPORTANT: RESPOND DIRECTLY TO THE USER'S COMMAND ABOVE. The user's action/choice is the primary driver for what happens next.`;
 
     // Add user choice to message history
     gameState.messageHistory.push({
@@ -741,7 +921,7 @@ export function exportGameState(): string {
     const exportData = {
         gameState: gameState,
         exportDate: new Date().toISOString(),
-        version: '1.0.6'
+        version: '1.0.7'
     };
     return JSON.stringify(exportData, null, 2);
 }
@@ -916,7 +1096,7 @@ export function exportSessionData(): string {
         session: currentSession,
         gameState: gameState,
         exportDate: new Date().toISOString(),
-        version: '1.0.6'
+        version: '1.0.7'
     };
     return JSON.stringify(exportData, null, 2);
 }

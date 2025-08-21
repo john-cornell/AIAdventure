@@ -54,10 +54,14 @@ const defaultConfig: GameConfig = {
     },
     database: {
         name: 'AIAdventureDB',
-        version: 2,
+        version: 3,
         maxEntries: 10000,
         autoBackup: true,
-        backupInterval: 60 // 1 hour
+        backupInterval: 60, // 1 hour
+        saveStorySteps: true, // Save individual story steps
+        autoDeleteOldStories: false, // Don't auto-delete by default
+        maxStoriesToKeep: 50, // Keep up to 50 stories
+        storyRetentionDays: 30 // Keep stories for 30 days
     },
     enableAudio: false,
     enableIcons: false,

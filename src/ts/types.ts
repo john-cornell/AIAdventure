@@ -111,6 +111,10 @@ export interface DatabaseConfig {
     maxEntries: number;
     autoBackup: boolean;
     backupInterval: number; // in minutes
+    saveStorySteps: boolean; // Whether to save individual story steps
+    autoDeleteOldStories: boolean; // Whether to automatically delete old stories
+    maxStoriesToKeep: number; // Maximum number of stories to keep
+    storyRetentionDays: number; // How many days to keep stories
 }
 
 export interface GameConfig {

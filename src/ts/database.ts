@@ -22,10 +22,27 @@ interface StorySummaryRecord {
     updated_at: Date;
 }
 
+interface StoryStepRecord {
+    id?: number;
+    session_id: string;
+    step_number: number;
+    story_entry_id: string;
+    choice: string;
+    outcome: string;
+    story_text: string;
+    image_prompt: string;
+    choices: string[];
+    ambience_prompt: string;
+    new_memories: string[];
+    timestamp: number;
+    image_data?: string;
+}
+
 // Extend Dexie to add our tables
 class GameDatabase extends Dexie {
     configs!: Table<ConfigRecord>;
     storySummaries!: Table<StorySummaryRecord>;
+    storySteps!: Table<StoryStepRecord>;
 
     constructor(dbName: string = 'AIAdventureDB') {
         super(dbName);
@@ -37,6 +54,12 @@ class GameDatabase extends Dexie {
         this.version(2).stores({
             configs: '++id, label, created_at, updated_at',
             storySummaries: '++id, session_id, step_count, created_at, updated_at'
+        });
+        
+        this.version(3).stores({
+            configs: '++id, label, created_at, updated_at',
+            storySummaries: '++id, session_id, step_count, created_at, updated_at',
+            storySteps: '++id, session_id, step_number, story_entry_id, timestamp'
         });
     }
 }
@@ -409,6 +432,111 @@ export async function getAllDatabaseData(): Promise<{
     } catch (error) {
         logError('Database', 'Failed to get all database data', error);
         throw error;
+    }
+}
+
+/**
+ * Save a story step to the database
+ */
+export async function saveStoryStep(
+    sessionId: string, 
+    stepNumber: number, 
+    storyEntryId: string,
+    choice: string,
+    outcome: string,
+    storyText: string,
+    imagePrompt: string,
+    choices: string[],
+    ambiencePrompt: string,
+    newMemories: string[],
+    timestamp: number,
+    imageData?: string
+): Promise<number> {
+    try {
+        const database = getDatabase();
+        const stepRecord: StoryStepRecord = {
+            session_id: sessionId,
+            step_number: stepNumber,
+            story_entry_id: storyEntryId,
+            choice,
+            outcome,
+            story_text: storyText,
+            image_prompt: imagePrompt,
+            choices,
+            ambience_prompt: ambiencePrompt,
+            new_memories: newMemories,
+            timestamp,
+            image_data: imageData
+        };
+
+        const id = await database.storySteps.add(stepRecord);
+        logInfo('Database', `Story step ${stepNumber} saved for session ${sessionId}`);
+        return id as number;
+        
+    } catch (error) {
+        logError('Database', `Failed to save story step ${stepNumber} for session ${sessionId}`, error);
+        throw error;
+    }
+}
+
+/**
+ * Load all story steps for a session
+ */
+export async function loadStorySteps(sessionId: string): Promise<StoryStepRecord[]> {
+    try {
+        const database = getDatabase();
+        const steps = await database.storySteps
+            .where('session_id')
+            .equals(sessionId)
+            .toArray();
+        
+        // Sort by step number
+        steps.sort((a, b) => a.step_number - b.step_number);
+        
+        logInfo('Database', `Loaded ${steps.length} story steps for session ${sessionId}`);
+        return steps;
+        
+    } catch (error) {
+        logError('Database', `Failed to load story steps for session ${sessionId}`, error);
+        return [];
+    }
+}
+
+/**
+ * Delete all story steps for a session
+ */
+export async function deleteStorySteps(sessionId: string): Promise<boolean> {
+    try {
+        const database = getDatabase();
+        const deletedCount = await database.storySteps
+            .where('session_id')
+            .equals(sessionId)
+            .delete();
+        
+        logInfo('Database', `Deleted ${deletedCount} story steps for session ${sessionId}`);
+        return deletedCount > 0;
+        
+    } catch (error) {
+        logError('Database', `Failed to delete story steps for session ${sessionId}`, error);
+        return false;
+    }
+}
+
+/**
+ * Get all sessions with story steps
+ */
+export async function getAllStoryStepSessions(): Promise<string[]> {
+    try {
+        const database = getDatabase();
+        const records = await database.storySteps.toArray();
+        const sessionIds = [...new Set(records.map(record => record.session_id))].sort();
+        
+        logInfo('Database', `Found ${sessionIds.length} sessions with story steps in database`);
+        return sessionIds;
+        
+    } catch (error) {
+        logError('Database', 'Failed to get story step sessions', error);
+        return [];
     }
 }
 
