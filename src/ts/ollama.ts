@@ -20,10 +20,13 @@ export async function callLocalLLM(
     messageHistory: Message[], 
     jsonFields: Array<{ name: string; type: string }>
 ): Promise<LLMResponse> {
-    const config = loadConfig();
+    console.log('🚀 callLocalLLM: Starting...');
+    const config = await loadConfig();
     const ollamaUrl = config.ollama.url;
     const model = config.ollama.model;
     const options = config.ollama.options;
+    
+    console.log('🔧 callLocalLLM: Config - URL:', ollamaUrl, 'Model:', model);
 
     // Format messages for Ollama API - use prompt format for better compatibility
     const messages = [
@@ -32,9 +35,19 @@ export async function callLocalLLM(
     ];
     
     // Convert messages to a single prompt string
-    const prompt = messages.map(msg => `${msg.role === 'system' ? 'System: ' : 'User: '}${msg.content}`).join('\n\n') + '\n\nAssistant: ';
+    const prompt = messages.map(msg => `${msg.role === 'system' ? 'System: ' : 'User: '}${msg.content}`).join('\n\n') + '\n\nAssistant: ONLY RETURN THE NEXT STEP AS JSON. DO NOT INCLUDE CONVERSATION HISTORY OR PREVIOUS RESPONSES.';
+    console.log('📝 callLocalLLM: Prompt length:', prompt.length, 'characters');
 
     try {
+        console.log('📡 callLocalLLM: Making fetch request to:', `${ollamaUrl}/api/generate`);
+        
+        // Create abort controller for timeout
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => {
+            console.warn('⏰ callLocalLLM: Request timeout after 60 seconds');
+            controller.abort();
+        }, 60000); // 60 second timeout
+        
         const response = await fetch(`${ollamaUrl}/api/generate`, {
             method: 'POST',
             headers: { 
@@ -46,34 +59,90 @@ export async function callLocalLLM(
                 prompt: prompt, // Use prompt instead of messages
                 stream: false,
                 options: options
-            })
+            }),
+            signal: controller.signal
         });
+        
+        clearTimeout(timeoutId);
 
+        console.log('📡 callLocalLLM: Response status:', response.status, response.statusText);
         if (!response.ok) {
             throw new Error(`Ollama API error: ${response.status} ${response.statusText}`);
         }
 
         const data: OllamaGenerateResponse = await response.json();
+        console.log('📡 callLocalLLM: Raw response data:', data);
         
         if (!data.response) {
+            console.error('❌ callLocalLLM: No response field in data:', data);
             throw new Error('No response received from Ollama');
         }
 
         // Parse JSON response from LLM
+        console.log('🔍 callLocalLLM: Parsing JSON response...');
         let parsedResponse: LLMResponse;
+        
+        // Extract JSON from markdown code blocks if present
+        let jsonString = data.response.trim();
+        if (jsonString.startsWith('```json') && jsonString.endsWith('```')) {
+            // Remove markdown code block formatting
+            jsonString = jsonString.slice(7, -3).trim(); // Remove ```json and ```
+            console.log('🔧 callLocalLLM: Extracted JSON from markdown code block');
+        } else if (jsonString.startsWith('```') && jsonString.endsWith('```')) {
+            // Remove generic markdown code block formatting
+            jsonString = jsonString.slice(3, -3).trim(); // Remove ``` and ```
+            console.log('🔧 callLocalLLM: Extracted JSON from generic markdown code block');
+        }
+        
+        // Handle multiple JSON objects by finding the last valid one
+        let lastValidJson = '';
+        const jsonMatches = jsonString.match(/\{[^{}]*(?:\{[^{}]*\}[^{}]*)*\}/g);
+        
+        if (jsonMatches && jsonMatches.length > 0) {
+            // Try each JSON object from last to first (most recent first)
+            for (let i = jsonMatches.length - 1; i >= 0; i--) {
+                try {
+                    const testJson = jsonMatches[i];
+                    const parsed = JSON.parse(testJson); // Test if valid JSON
+                    
+                    // Additional validation: ensure this is a story response, not a previous one
+                    if (parsed.story && parsed.choices && Array.isArray(parsed.choices)) {
+                        lastValidJson = testJson;
+                        console.log('🔧 callLocalLLM: Found valid story JSON object at position', i, 'with', parsed.choices.length, 'choices');
+                        break;
+                    } else {
+                        console.log('🔧 callLocalLLM: Skipping invalid story JSON at position', i);
+                    }
+                } catch (e) {
+                    console.log('🔧 callLocalLLM: Invalid JSON at position', i);
+                    // Continue to next match
+                }
+            }
+        }
+        
+        // If no valid JSON found in matches, try the original string
+        if (!lastValidJson) {
+            lastValidJson = jsonString;
+        }
+        
         try {
-            parsedResponse = JSON.parse(data.response);
+            parsedResponse = JSON.parse(lastValidJson);
+            console.log('✅ callLocalLLM: Successfully parsed JSON:', parsedResponse);
         } catch (parseError) {
-            console.error('Failed to parse LLM response as JSON:', data.response);
+            console.error('❌ callLocalLLM: Failed to parse LLM response as JSON:', data.response);
+            console.error('❌ callLocalLLM: Extracted JSON string:', lastValidJson);
             throw new Error('Invalid JSON response from LLM');
         }
 
         // Validate required fields
+        console.log('🔍 callLocalLLM: Validating required fields:', jsonFields.map(f => f.name));
         const missingFields = jsonFields.filter(field => !(field.name in parsedResponse));
         if (missingFields.length > 0) {
+            console.error('❌ callLocalLLM: Missing required fields:', missingFields.map(f => f.name));
             throw new Error(`Missing required fields: ${missingFields.map(f => f.name).join(', ')}`);
         }
 
+        console.log('✅ callLocalLLM: All validation passed, returning response');
         return parsedResponse;
 
     } catch (error) {
@@ -88,7 +157,7 @@ export async function callLocalLLM(
  * @returns Array of available model names
  */
 export async function getAvailableOllamaModels(url?: string): Promise<string[]> {
-    const config = loadConfig();
+    const config = await loadConfig();
     const ollamaUrl = url || config.ollama.url;
 
     try {
@@ -155,6 +224,30 @@ async function loadModel(url: string, model: string): Promise<boolean> {
  * @returns Test result with status and details
  */
 export async function testOllamaConnection(url: string, model: string): Promise<{
+    success: boolean;
+    message: string;
+    details: any;
+}> {
+    // Add timeout to prevent hanging
+    const timeoutMs = 30000; // 30 second timeout
+    const timeoutPromise = new Promise((_, reject) => {
+        setTimeout(() => reject(new Error('Test timeout after 30 seconds')), timeoutMs);
+    });
+    
+    const testPromise = testOllamaConnectionInternal(url, model);
+    
+    try {
+        return await Promise.race([testPromise, timeoutPromise]) as any;
+    } catch (error) {
+        return {
+            success: false,
+            message: `Test failed: ${error instanceof Error ? error.message : 'Unknown error'}`,
+            details: {}
+        };
+    }
+}
+
+async function testOllamaConnectionInternal(url: string, model: string): Promise<{
     success: boolean;
     message: string;
     details: any;
@@ -319,23 +412,30 @@ export async function callLocalLLMWithRetry(
     jsonFields: Array<{ name: string; type: string }>, 
     maxRetries: number = 3
 ): Promise<LLMResponse> {
+    console.log('🔄 callLocalLLMWithRetry: Starting with', maxRetries, 'retries');
     let lastError: Error;
     
     for (let attempt = 1; attempt <= maxRetries; attempt++) {
+        console.log(`🔄 callLocalLLMWithRetry: Attempt ${attempt}/${maxRetries}`);
         try {
-            return await callLocalLLM(systemPrompt, messageHistory, jsonFields);
+            console.log('📡 callLocalLLMWithRetry: Calling callLocalLLM...');
+            const result = await callLocalLLM(systemPrompt, messageHistory, jsonFields);
+            console.log('✅ callLocalLLMWithRetry: Success! Result:', result);
+            return result;
         } catch (error) {
             lastError = error instanceof Error ? error : new Error('Unknown error');
-            console.warn(`Ollama API attempt ${attempt} failed:`, lastError.message);
+            console.warn(`❌ callLocalLLMWithRetry: Attempt ${attempt} failed:`, lastError.message);
             
             if (attempt < maxRetries) {
                 // Exponential backoff: wait 1s, 2s, 4s...
                 const delay = Math.pow(2, attempt - 1) * 1000;
+                console.log(`⏳ callLocalLLMWithRetry: Waiting ${delay}ms before retry...`);
                 await new Promise(resolve => setTimeout(resolve, delay));
             }
         }
     }
     
+    console.error(`💥 callLocalLLMWithRetry: All ${maxRetries} attempts failed. Last error:`, lastError!.message);
     throw new Error(`Ollama API failed after ${maxRetries} attempts. Last error: ${lastError!.message}`);
 }
 
@@ -380,4 +480,80 @@ export function classifyOllamaError(error: Error): ErrorClassification {
     }
 
     return classification;
+}
+
+/**
+ * Get detailed model metadata including context limits
+ * @param url - Ollama server URL (optional)
+ * @param model - Model name to get info for
+ * @returns Detailed model information
+ */
+export async function getModelMetadata(url?: string, model?: string): Promise<{
+    name: string;
+    context_length?: number;
+    embedding_length?: number;
+    parameters?: string;
+    quantization_level?: string;
+    format?: string;
+    family?: string;
+    parameter_size?: string;
+    modified_at: string;
+    size: number;
+}> {
+    const config = await loadConfig();
+    const ollamaUrl = url || config.ollama.url;
+    const modelName = model || config.ollama.model;
+
+    try {
+        const response = await fetch(`${ollamaUrl}/api/show`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Accept': 'application/json'
+            },
+            body: JSON.stringify({
+                name: modelName
+            })
+        });
+
+        if (!response.ok) {
+            throw new Error(`Failed to fetch model metadata: ${response.status} ${response.statusText}`);
+        }
+
+        const data = await response.json();
+        console.log('📋 Model metadata:', data);
+        
+        return {
+            name: data.name || modelName,
+            context_length: data.context_length,
+            embedding_length: data.embedding_length,
+            parameters: data.parameters,
+            quantization_level: data.quantization_level,
+            format: data.format,
+            family: data.family,
+            parameter_size: data.parameter_size,
+            modified_at: data.modified_at,
+            size: data.size
+        };
+
+    } catch (error) {
+        console.error('Failed to fetch model metadata:', error);
+        throw error;
+    }
+}
+
+/**
+ * Get context limit for a specific model
+ * @param url - Ollama server URL (optional)
+ * @param model - Model name (optional)
+ * @returns Context limit in tokens, or null if unknown
+ */
+export async function getModelContextLimit(url?: string, model?: string): Promise<number | null> {
+    try {
+        const metadata = await getModelMetadata(url, model);
+        return metadata.context_length || null;
+    } catch (error) {
+        console.warn('Could not determine context limit for model:', error);
+        return null;
+    }
 }

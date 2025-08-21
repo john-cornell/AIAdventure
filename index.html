@@ -4,6 +4,13 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>AI Adventure Game</title>
+    <script type="importmap">
+    {
+        "imports": {
+            "dexie": "https://cdn.skypack.dev/dexie@4.2.0"
+        }
+    }
+    </script>
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
         body {
@@ -135,9 +142,13 @@
     </script>
     
     <!-- Game Info -->
-    <div class="fixed bottom-4 right-4 text-xs text-gray-400 opacity-50 hover:opacity-100 transition-opacity">
-        <div class="bg-black/20 rounded px-2 py-1">
-            AI Adventure v1.0.0
+    <div class="fixed bottom-4 right-4 text-sm text-white opacity-75 hover:opacity-100 transition-opacity">
+        <div class="bg-indigo-600/80 border border-indigo-500/50 rounded-lg px-3 py-2 shadow-lg">
+            <div class="flex items-center gap-2">
+                <span class="text-indigo-200">🎮</span>
+                <span class="font-semibold">AI Adventure</span>
+                <span class="text-indigo-300">v1.0.4</span>
+            </div>
         </div>
     </div>
 </body>

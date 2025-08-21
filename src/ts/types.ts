@@ -4,16 +4,29 @@ export interface LLMResponse {
     image_prompt: string;
     choices: string[];
     ambience_prompt: string;
-    new_memories: string[];
+    new_memories?: string[]; // Optional - not every story beat needs to create memories
+    summary?: string; // Optional field for story summaries
+}
+
+export interface GameSession {
+    id: string; // UUID for the game session
+    title: string; // User-defined or auto-generated title
+    createdAt: number; // Timestamp when session was created
+    lastPlayedAt: number; // Timestamp when session was last accessed
+    initialPrompt: string; // The prompt that started this session
+    config?: Partial<GameConfig>; // Config snapshot for this session
 }
 
 export interface GameState {
+    sessionId?: string; // Current session UUID
     currentState: 'MENU' | 'LOADING' | 'PLAYING' | 'ERROR';
     messageHistory: Message[];
     storyLog: StoryEntry[];
     actionLog: ActionEntry[];
     memories: string[];
     isMusicPlaying: boolean;
+    contextTokenCount: number;
+    contextLimit: number | null;
     error?: {
         classification: ErrorClassification;
         retriesLeft: number;
@@ -26,11 +39,12 @@ export interface Message {
 }
 
 export interface StoryEntry {
+    id: string; // UUID for the story entry
     story: string;
     image_prompt: string;
     choices: string[];
     ambience_prompt: string;
-    new_memories: string[];
+    new_memories?: string[]; // Optional - not every story beat needs to create memories
     timestamp: number;
     imageData?: string; // Base64 encoded image data
 }
@@ -52,8 +66,23 @@ export interface OllamaConfig {
     };
 }
 
+export interface LoraConfig {
+    name: string;
+    strength: number; // 0.0 to 1.0
+    enabled: boolean;
+    tags: string; // Comma-separated trigger words/tags to add to prompts
+}
+
+export interface TextualInversionConfig {
+    name: string;
+    enabled: boolean;
+    trigger: string; // Main trigger word for the embedding
+    tags: string; // Additional tags to add to prompts
+}
+
 export interface StableDiffusionConfig {
     url: string;
+    basePath: string; // Path to Stable Diffusion WebUI installation
     model: string;
     options: {
         steps: number;
@@ -62,13 +91,35 @@ export interface StableDiffusionConfig {
         width: number;
         height: number;
     };
+    faceRestoration: 'auto' | 'always' | 'never';
+    loras: LoraConfig[];
+    textualInversions: TextualInversionConfig[];
+}
+
+
+
+export interface LoggingConfig {
+    level: 'error' | 'warn' | 'info' | 'debug';
+    consoleOutput: boolean;
+    maxEntries: number;
+}
+
+export interface DatabaseConfig {
+    name: string;
+    version: number;
+    maxEntries: number;
+    autoBackup: boolean;
+    backupInterval: number; // in minutes
 }
 
 export interface GameConfig {
     ollama: OllamaConfig;
     stableDiffusion: StableDiffusionConfig;
+    logging: LoggingConfig;
+    database: DatabaseConfig;
     enableAudio: boolean;
     enableIcons: boolean;
+    gameName?: string; // Optional game name for the current session
 }
 
 // API response types
