@@ -35,7 +35,11 @@ export async function generateLocalImage(
         strength: lora.strength
     }));
 
-    // Collect LORA tags
+    // Collect LORA syntax and tags
+    const loraSyntax = enabledLoras
+        .map(lora => `<lora:${lora.name}:${lora.strength}>`)
+        .join(', ');
+    
     const loraTags = enabledLoras
         .filter(lora => lora.tags && lora.tags.trim())
         .map(lora => lora.tags.trim())
@@ -71,6 +75,7 @@ export async function generateLocalImage(
         .join(', ');
 
     console.log('🎨 Using LORAs:', loraConfigs);
+    console.log('🎨 LORA Syntax:', loraSyntax);
     console.log('🎨 LORA Tags:', loraTags);
     console.log('🎨 Using Textual Inversions:', enabledTextualInversions.map(ti => ti.name));
     console.log('🎨 Positive Textual Inversion Tags:', positiveTextualInversionTags);
@@ -78,11 +83,12 @@ export async function generateLocalImage(
     console.log('🎨 Negative Textual Inversion Tags:', negativeTextualInversionTags);
     console.log('🎨 Negative Textual Inversion Triggers:', negativeTextualInversionTriggers);
 
-    // Enhanced positive prompt with LORA tags and positive Textual Inversion triggers/tags
+    // Enhanced positive prompt with LORA syntax, tags and positive Textual Inversion triggers/tags
     const baseEnhancement = `photorealistic, highly detailed, professional photography, 8k uhd, dslr, high quality, sharp focus, perfect lighting, cinematic lighting, masterpiece, best quality, ultra detailed`;
     
     // Combine positive enhancement tags
     const positiveEnhancementTags = [
+        loraSyntax,
         loraTags,
         positiveTextualInversionTags,
         positiveTextualInversionTriggers,
@@ -670,7 +676,11 @@ export async function generateLocalImageWithFaceRestoration(
         strength: lora.strength
     }));
 
-    // Collect LORA tags
+    // Collect LORA syntax and tags
+    const loraSyntax = enabledLoras
+        .map(lora => `<lora:${lora.name}:${lora.strength}>`)
+        .join(', ');
+    
     const loraTags = enabledLoras
         .filter(lora => lora.tags && lora.tags.trim())
         .map(lora => lora.tags.trim())
@@ -707,17 +717,19 @@ export async function generateLocalImageWithFaceRestoration(
         .join(', ');
 
     console.log('🎨 Using LORAs with face restoration:', loraConfigs);
+    console.log('🎨 LORA Syntax:', loraSyntax);
     console.log('🎨 LORA Tags:', loraTags);
     console.log('🎨 Positive Textual Inversion Tags:', positiveTextualInversionTags);
     console.log('🎨 Positive Textual Inversion Triggers:', positiveTextualInversionTriggers);
     console.log('🎨 Negative Textual Inversion Tags:', negativeTextualInversionTags);
     console.log('🎨 Negative Textual Inversion Triggers:', negativeTextualInversionTriggers);
 
-    // Enhanced positive prompt for face restoration with LORA tags and positive Textual Inversions
+    // Enhanced positive prompt for face restoration with LORA syntax, tags and positive Textual Inversions
     const baseEnhancement = `photorealistic, highly detailed, professional photography, 8k uhd, dslr, high quality, sharp focus, perfect lighting, cinematic lighting, masterpiece, best quality, ultra detailed`;
     
     // Combine positive enhancement tags
     const positiveEnhancementTags = [
+        loraSyntax,
         loraTags,
         positiveTextualInversionTags,
         positiveTextualInversionTriggers,

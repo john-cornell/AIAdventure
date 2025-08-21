@@ -681,6 +681,9 @@ function createDatabaseOverlayHTML(): string {
                                 </select>
                             </div>
                             <div class="mb-4">
+                                <button id="load-game" class="bg-green-600 hover:bg-green-500 text-white px-4 py-2 rounded-lg mr-2">
+                                    🎮 Load Game
+                                </button>
                                 <button id="load-story-steps" class="bg-blue-600 hover:bg-blue-500 text-white px-4 py-2 rounded-lg mr-2">
                                     📖 Load Story Steps
                                 </button>
@@ -3205,6 +3208,108 @@ async function deleteStorySteps(sessionId: string): Promise<void> {
 }
 
 /**
+ * Load game from database by session ID
+ */
+async function loadGameFromDatabase(sessionId: string): Promise<void> {
+    try {
+        showMessage('Loading game from database...', 'success');
+        
+        // Get story steps for this session
+        const { loadStorySteps } = await import('./database.js');
+        const storySteps = await loadStorySteps(sessionId);
+        
+        if (storySteps.length === 0) {
+            showMessage('No story steps found for this session', 'error');
+            return;
+        }
+        
+        // Sort steps by step number
+        storySteps.sort((a, b) => a.step_number - b.step_number);
+        
+        // Reconstruct game state from story steps
+        const messageHistory: any[] = [];
+        const storyLog: any[] = [];
+        const actionLog: any[] = [];
+        const memories: string[] = [];
+        
+        // Process each story step
+        storySteps.forEach(step => {
+            // Add story entry to story log
+            const storyEntry = {
+                id: step.story_entry_id,
+                story: step.story_text,
+                image_prompt: step.image_prompt,
+                choices: step.choices,
+                ambience_prompt: step.ambience_prompt,
+                timestamp: step.timestamp
+            };
+            storyLog.push(storyEntry);
+            
+            // Add action to action log
+            const actionEntry = {
+                choice: step.choice,
+                timestamp: step.timestamp,
+                outcome: step.outcome
+            };
+            actionLog.push(actionEntry);
+            
+            // Add memories
+            if (step.new_memories && step.new_memories.length > 0) {
+                memories.push(...step.new_memories);
+            }
+        });
+        
+        // Create a reconstructed game session
+        const reconstructedSession = {
+            id: sessionId,
+            title: `Reconstructed Session ${sessionId}`,
+            createdAt: storySteps[0]?.timestamp || Date.now(),
+            lastPlayedAt: storySteps[storySteps.length - 1]?.timestamp || Date.now(),
+            initialPrompt: 'Game loaded from database',
+            config: await loadConfig()
+        };
+        
+        // Import the reconstructed game state
+        const { importSessionData } = await import('./game.js');
+        const importData = {
+            session: reconstructedSession,
+            gameState: {
+                sessionId: sessionId,
+                currentState: 'PLAYING',
+                messageHistory: messageHistory,
+                storyLog: storyLog,
+                actionLog: actionLog,
+                memories: memories,
+                isMusicPlaying: false,
+                contextTokenCount: 0,
+                contextLimit: null
+            }
+        };
+        
+        const result = importSessionData(JSON.stringify(importData));
+        
+        if (result.success) {
+            // Close database overlay
+            hideDatabaseOverlay();
+            
+            // Switch to game screen
+            showGameScreen();
+            
+            // Update the UI to show the loaded content
+            updateStoryDisplay();
+            
+            showMessage(`Game loaded successfully! Session: ${sessionId}`, 'success');
+        } else {
+            showMessage(`Failed to load game: ${result.error}`, 'error');
+        }
+        
+    } catch (error) {
+        console.error('Error loading game from database:', error);
+        showMessage('Error loading game from database', 'error');
+    }
+}
+
+/**
  * Load story sessions into the selector
  */
 async function loadStorySessions(): Promise<void> {
@@ -3232,6 +3337,21 @@ async function loadStorySessions(): Promise<void> {
  * Setup story management event handlers
  */
 function setupStoryManagementHandlers(): void {
+    // Load game button
+    const loadGameButton = document.getElementById('load-game');
+    if (loadGameButton) {
+        loadGameButton.addEventListener('click', async () => {
+            const selector = document.getElementById('story-session-selector') as HTMLSelectElement;
+            const sessionId = selector?.value;
+            
+            if (sessionId) {
+                await loadGameFromDatabase(sessionId);
+            } else {
+                showMessage('Please select a session first', 'error');
+            }
+        });
+    }
+    
     // Load story steps button
     const loadButton = document.getElementById('load-story-steps');
     if (loadButton) {
