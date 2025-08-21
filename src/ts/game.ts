@@ -752,18 +752,18 @@ export async function updateGame(choice: string): Promise<void> {
     }
 
     // Build enhanced choice with context in priority order
-    let enhancedChoice = finalChoice;
+    let enhancedChoice = '';
     
     // 0. INITIAL PROMPT CONTEXT (only for first call when starting new game)
     if (gameState.storyLog.length === 0 && currentSession?.initialPrompt) {
-        enhancedChoice = `INITIAL STORY PROMPT: ${currentSession.initialPrompt}\n\n${enhancedChoice}`;
+        enhancedChoice = `INITIAL STORY PROMPT: ${currentSession.initialPrompt}\n\n`;
         logInfo('Game', `Added initial prompt context: ${currentSession.initialPrompt}`);
     }
     
     // 1. STORY SUMMARY FIRST (always include for context)
     const storySummaryContext = await getStorySummaryContext();
     if (storySummaryContext) {
-        enhancedChoice = `${storySummaryContext}\n\n${enhancedChoice}`;
+        enhancedChoice += `${storySummaryContext}\n\n`;
         logInfo('Game', `Added story summary context (${storySummaryContext.length} chars)`);
         logDebug('Game', `Story summary content: ${storySummaryContext.substring(0, 200)}...`);
     } else {
@@ -777,19 +777,19 @@ export async function updateGame(choice: string): Promise<void> {
             `Step ${gameState.storyLog.length - 1 + index}: ${step.story.substring(0, 150)}...`
         ).join('\n');
         
-        enhancedChoice = `Recent Story Steps:\n${stepsContext}\n\n${enhancedChoice}`;
+        enhancedChoice += `Recent Story Steps:\n${stepsContext}\n\n`;
         logDebug('Game', `Added recent steps context (${stepsContext.length} chars)`);
     }
     
     // 3. MEMORIES CONTEXT
     const memoriesContext = getMemoriesContext();
     if (memoriesContext) {
-        enhancedChoice = `${memoriesContext}\n\n${enhancedChoice}`;
+        enhancedChoice += `${memoriesContext}\n\n`;
         logDebug('Game', `Added memories context: ${memoriesContext}`);
     }
     
-    // 4. EMPHASIZE USER COMMAND (add at the end with strong emphasis)
-    enhancedChoice = `${enhancedChoice}\n\nIMPORTANT: RESPOND DIRECTLY TO THE USER'S COMMAND ABOVE. The user's action/choice is the primary driver for what happens next.`;
+    // 4. USER COMMAND AT THE END (with strong emphasis)
+    enhancedChoice += `RESPOND TO THE USER'S ACTION: ${finalChoice}\n\nIMPORTANT: The user's action/choice is the primary driver for what happens next.`;
 
     // Add user choice to message history
     gameState.messageHistory.push({
