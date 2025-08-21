@@ -136,9 +136,12 @@ export async function callLocalLLM(
 
         // Validate required fields
         console.log('🔍 callLocalLLM: Validating required fields:', jsonFields.map(f => f.name));
+        console.log('🔍 callLocalLLM: Parsed response keys:', Object.keys(parsedResponse));
         const missingFields = jsonFields.filter(field => !(field.name in parsedResponse));
         if (missingFields.length > 0) {
             console.error('❌ callLocalLLM: Missing required fields:', missingFields.map(f => f.name));
+            console.error('❌ callLocalLLM: Full parsed response:', parsedResponse);
+            console.error('❌ callLocalLLM: Raw LLM response:', data.response);
             throw new Error(`Missing required fields: ${missingFields.map(f => f.name).join(', ')}`);
         }
 

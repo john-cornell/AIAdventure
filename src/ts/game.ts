@@ -42,6 +42,8 @@ const jsonFields = [
 const systemPrompt = `You are an expert storyteller creating an interactive adventure game. Generate responses in JSON format with the following structure:
 YOU MUST RESPOND DIRECTLY TO THE USER'S COMMAND.
 YOU MUST PROVIDE FOUR UNIQUE CHOICES.
+
+RESPONSE FORMAT - RETURN ONLY VALID JSON:
 {
   "story": "A vivid, engaging description of the current scene and what happens next",
   "image_prompt": "A detailed visual description for generating an image of this scene",
@@ -63,6 +65,9 @@ CRITICAL INSTRUCTIONS:
 4. Use the provided context (summary, recent steps, memories) to inform your response, but the user's command takes priority
 5. Keep the story engaging, descriptive, and responsive to player choices
 6. The story should be immersive and allow for meaningful player agency
+7. ALWAYS return valid JSON with ALL required fields: story, image_prompt, choices, ambience_prompt
+8. DO NOT include any text before or after the JSON object
+9. DO NOT use markdown formatting or code blocks
 
 REMEMBER: The user's command is what drives the story forward. Respond to it directly and meaningfully.`;
 
