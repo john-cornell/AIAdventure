@@ -44,13 +44,28 @@ export async function generateLocalImage(
     // Prepare Textual Inversion configurations
     const enabledTextualInversions = textualInversions.filter(ti => ti.enabled);
     
-    // Collect Textual Inversion tags and triggers
-    const textualInversionTags = enabledTextualInversions
+    // Separate positive and negative Textual Inversions
+    const positiveTextualInversions = enabledTextualInversions.filter(ti => !ti.isNegative);
+    const negativeTextualInversions = enabledTextualInversions.filter(ti => ti.isNegative);
+    
+    // Collect positive Textual Inversion tags and triggers
+    const positiveTextualInversionTags = positiveTextualInversions
         .filter(ti => ti.tags && ti.tags.trim())
         .map(ti => ti.tags.trim())
         .join(', ');
     
-    const textualInversionTriggers = enabledTextualInversions
+    const positiveTextualInversionTriggers = positiveTextualInversions
+        .filter(ti => ti.trigger && ti.trigger.trim())
+        .map(ti => ti.trigger.trim())
+        .join(', ');
+    
+    // Collect negative Textual Inversion tags and triggers
+    const negativeTextualInversionTags = negativeTextualInversions
+        .filter(ti => ti.tags && ti.tags.trim())
+        .map(ti => ti.tags.trim())
+        .join(', ');
+    
+    const negativeTextualInversionTriggers = negativeTextualInversions
         .filter(ti => ti.trigger && ti.trigger.trim())
         .map(ti => ti.trigger.trim())
         .join(', ');
@@ -58,26 +73,38 @@ export async function generateLocalImage(
     console.log('🎨 Using LORAs:', loraConfigs);
     console.log('🎨 LORA Tags:', loraTags);
     console.log('🎨 Using Textual Inversions:', enabledTextualInversions.map(ti => ti.name));
-    console.log('🎨 Textual Inversion Tags:', textualInversionTags);
-    console.log('🎨 Textual Inversion Triggers:', textualInversionTriggers);
+    console.log('🎨 Positive Textual Inversion Tags:', positiveTextualInversionTags);
+    console.log('🎨 Positive Textual Inversion Triggers:', positiveTextualInversionTriggers);
+    console.log('🎨 Negative Textual Inversion Tags:', negativeTextualInversionTags);
+    console.log('🎨 Negative Textual Inversion Triggers:', negativeTextualInversionTriggers);
 
-    // Enhanced positive prompt with LORA tags and Textual Inversion triggers/tags
+    // Enhanced positive prompt with LORA tags and positive Textual Inversion triggers/tags
     const baseEnhancement = `photorealistic, highly detailed, professional photography, 8k uhd, dslr, high quality, sharp focus, perfect lighting, cinematic lighting, masterpiece, best quality, ultra detailed`;
     
-    // Combine all enhancement tags
-    const enhancementTags = [
+    // Combine positive enhancement tags
+    const positiveEnhancementTags = [
         loraTags,
-        textualInversionTags,
-        textualInversionTriggers,
+        positiveTextualInversionTags,
+        positiveTextualInversionTriggers,
         baseEnhancement
     ].filter(Boolean).join(', ');
     
-    const enhancedPrompt = enhancementTags 
-        ? `${prompt}, ${enhancementTags}`
+    const enhancedPrompt = positiveEnhancementTags 
+        ? `${prompt}, ${positiveEnhancementTags}`
         : `${prompt}, ${baseEnhancement}`;
     
-    // Enhanced negative prompt
-    const negativePrompt = "blurry, low quality, distorted, ugly, bad anatomy, watermark, text, signature, logo, oversaturated, overexposed, underexposed, low resolution, pixelated, jpeg artifacts, compression artifacts, noise, grain, out of focus, soft focus, motion blur, chromatic aberration, lens distortion, vignetting, amateur, cell phone, webcam, surveillance camera, poor quality, bad quality, terrible quality, worst quality, low effort, ai generated, artificial, fake, synthetic, computer generated, digital art, illustration, painting, drawing, sketch, cartoon, anime, manga, comic, graphic novel, stylized, artistic, abstract, surreal, dreamy, fantasy, magical, mystical, supernatural";
+    // Enhanced negative prompt with negative Textual Inversion triggers/tags
+    const baseNegativePrompt = "blurry, low quality, distorted, ugly, bad anatomy, watermark, text, signature, logo, oversaturated, overexposed, underexposed, low resolution, pixelated, jpeg artifacts, compression artifacts, noise, grain, out of focus, soft focus, motion blur, chromatic aberration, lens distortion, vignetting, amateur, cell phone, webcam, surveillance camera, poor quality, bad quality, terrible quality, worst quality, low effort, ai generated, artificial, fake, synthetic, computer generated, digital art, illustration, painting, drawing, sketch, cartoon, anime, manga, comic, graphic novel, stylized, artistic, abstract, surreal, dreamy, fantasy, magical, mystical, supernatural";
+    
+    // Combine negative enhancement tags
+    const negativeEnhancementTags = [
+        negativeTextualInversionTags,
+        negativeTextualInversionTriggers
+    ].filter(Boolean).join(', ');
+    
+    const negativePrompt = negativeEnhancementTags 
+        ? `${baseNegativePrompt}, ${negativeEnhancementTags}`
+        : baseNegativePrompt;
 
     // Log the complete prompt information
     console.log('🎨 === IMAGE GENERATION PROMPT ===');
@@ -649,17 +676,70 @@ export async function generateLocalImageWithFaceRestoration(
         .map(lora => lora.tags.trim())
         .join(', ');
 
+    // Prepare Textual Inversion configurations for face restoration
+    const textualInversions = config.stableDiffusion.textualInversions;
+    const enabledTextualInversions = textualInversions.filter(ti => ti.enabled);
+    
+    // Separate positive and negative Textual Inversions
+    const positiveTextualInversions = enabledTextualInversions.filter(ti => !ti.isNegative);
+    const negativeTextualInversions = enabledTextualInversions.filter(ti => ti.isNegative);
+    
+    // Collect positive Textual Inversion tags and triggers
+    const positiveTextualInversionTags = positiveTextualInversions
+        .filter(ti => ti.tags && ti.tags.trim())
+        .map(ti => ti.tags.trim())
+        .join(', ');
+    
+    const positiveTextualInversionTriggers = positiveTextualInversions
+        .filter(ti => ti.trigger && ti.trigger.trim())
+        .map(ti => ti.trigger.trim())
+        .join(', ');
+    
+    // Collect negative Textual Inversion tags and triggers
+    const negativeTextualInversionTags = negativeTextualInversions
+        .filter(ti => ti.tags && ti.tags.trim())
+        .map(ti => ti.tags.trim())
+        .join(', ');
+    
+    const negativeTextualInversionTriggers = negativeTextualInversions
+        .filter(ti => ti.trigger && ti.trigger.trim())
+        .map(ti => ti.trigger.trim())
+        .join(', ');
+
     console.log('🎨 Using LORAs with face restoration:', loraConfigs);
     console.log('🎨 LORA Tags:', loraTags);
+    console.log('🎨 Positive Textual Inversion Tags:', positiveTextualInversionTags);
+    console.log('🎨 Positive Textual Inversion Triggers:', positiveTextualInversionTriggers);
+    console.log('🎨 Negative Textual Inversion Tags:', negativeTextualInversionTags);
+    console.log('🎨 Negative Textual Inversion Triggers:', negativeTextualInversionTriggers);
 
-    // Enhanced positive prompt for face restoration with LORA tags
+    // Enhanced positive prompt for face restoration with LORA tags and positive Textual Inversions
     const baseEnhancement = `photorealistic, highly detailed, professional photography, 8k uhd, dslr, high quality, sharp focus, perfect lighting, cinematic lighting, masterpiece, best quality, ultra detailed`;
-    const enhancedPrompt = loraTags 
-        ? `${prompt}, ${loraTags}, ${baseEnhancement}`
+    
+    // Combine positive enhancement tags
+    const positiveEnhancementTags = [
+        loraTags,
+        positiveTextualInversionTags,
+        positiveTextualInversionTriggers,
+        baseEnhancement
+    ].filter(Boolean).join(', ');
+    
+    const enhancedPrompt = positiveEnhancementTags 
+        ? `${prompt}, ${positiveEnhancementTags}`
         : `${prompt}, ${baseEnhancement}`;
     
-    // Enhanced negative prompt for face restoration (includes face-specific terms)
-    const negativePrompt = "blurry, low quality, distorted, ugly, bad anatomy, deformed face, bad face, ugly face, disfigured face, watermark, text, signature, logo, oversaturated, overexposed, underexposed, low resolution, pixelated, jpeg artifacts, compression artifacts, noise, grain, out of focus, soft focus, motion blur, chromatic aberration, lens distortion, vignetting, amateur, cell phone, webcam, surveillance camera, poor quality, bad quality, terrible quality, worst quality, low effort, ai generated, artificial, fake, synthetic, computer generated, digital art, illustration, painting, drawing, sketch, cartoon, anime, manga, comic, graphic novel, stylized, artistic, abstract, surreal, dreamy, fantasy, magical, mystical, supernatural";
+    // Enhanced negative prompt for face restoration with negative Textual Inversions
+    const baseNegativePrompt = "blurry, low quality, distorted, ugly, bad anatomy, deformed face, bad face, ugly face, disfigured face, watermark, text, signature, logo, oversaturated, overexposed, underexposed, low resolution, pixelated, jpeg artifacts, compression artifacts, noise, grain, out of focus, soft focus, motion blur, chromatic aberration, lens distortion, vignetting, amateur, cell phone, webcam, surveillance camera, poor quality, bad quality, terrible quality, worst quality, low effort, ai generated, artificial, fake, synthetic, computer generated, digital art, illustration, painting, drawing, sketch, cartoon, anime, manga, comic, graphic novel, stylized, artistic, abstract, surreal, dreamy, fantasy, magical, mystical, supernatural";
+    
+    // Combine negative enhancement tags
+    const negativeEnhancementTags = [
+        negativeTextualInversionTags,
+        negativeTextualInversionTriggers
+    ].filter(Boolean).join(', ');
+    
+    const negativePrompt = negativeEnhancementTags 
+        ? `${baseNegativePrompt}, ${negativeEnhancementTags}`
+        : baseNegativePrompt;
 
     // Log the complete prompt information for face restoration
     console.log('🎨 === FACE RESTORATION IMAGE GENERATION PROMPT ===');

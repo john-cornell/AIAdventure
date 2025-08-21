@@ -79,6 +79,7 @@ export interface TextualInversionConfig {
     enabled: boolean;
     trigger: string; // Main trigger word for the embedding
     tags: string; // Additional tags to add to prompts
+    isNegative: boolean; // Whether to add to negative prompt instead of positive prompt
 }
 
 export interface StableDiffusionConfig {
@@ -117,11 +118,28 @@ export interface DatabaseConfig {
     storyRetentionDays: number; // How many days to keep stories
 }
 
+export interface MemoriesConfig {
+    enabled: boolean; // Whether memory system is enabled
+    maxMemories: number; // Maximum number of memories to keep per session
+    memoryRetentionDays: number; // How many days to keep memories
+    autoCleanup: boolean; // Whether to automatically clean up old memories
+    memoryImportance: 'low' | 'medium' | 'high'; // How much weight to give memories in context
+    includeInContext: boolean; // Whether to include memories in LLM context
+    memoryTypes: {
+        character: boolean; // Character-related memories
+        location: boolean; // Location-related memories
+        item: boolean; // Item-related memories
+        event: boolean; // Event-related memories
+        relationship: boolean; // Relationship-related memories
+    };
+}
+
 export interface GameConfig {
     ollama: OllamaConfig;
     stableDiffusion: StableDiffusionConfig;
     logging: LoggingConfig;
     database: DatabaseConfig;
+    memories: MemoriesConfig;
     enableAudio: boolean;
     enableIcons: boolean;
     gameName?: string; // Optional game name for the current session

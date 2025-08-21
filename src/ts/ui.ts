@@ -871,7 +871,7 @@ function setupEventListeners(): void {
     // Database overlay tab switching
     document.addEventListener('click', (e) => {
         const target = e.target as HTMLElement;
-        if (target.id === 'db-tab-configs' || target.id === 'db-tab-summaries' || target.id === 'db-tab-current-game') {
+        if (target.id === 'db-tab-configs' || target.id === 'db-tab-summaries' || target.id === 'db-tab-current-game' || target.id === 'db-tab-story-management') {
             switchDatabaseTab(target.id);
         }
     });
@@ -1052,7 +1052,8 @@ function setupSettingsEvents(): void {
                     name: '',
                     enabled: true,
                     trigger: '',
-                    tags: ''
+                    tags: '',
+                    isNegative: false
                 };
                 const textualInversionElement = createTextualInversionElement(newTextualInversion, container.children.length);
                 container.appendChild(textualInversionElement);
@@ -1510,6 +1511,14 @@ function createTextualInversionElement(textualInversion: TextualInversionConfig,
                    value="${textualInversion.tags || ''}"
                    title="Additional tags to add to image prompts when this embedding is enabled">
         </div>
+        <div class="flex items-center gap-2">
+            <label class="flex items-center gap-1 text-xs text-gray-300">
+                <input type="checkbox" 
+                       class="textual-inversion-negative" 
+                       ${textualInversion.isNegative ? 'checked' : ''}>
+                Add to Negative Prompt
+            </label>
+        </div>
     `;
     
     // Add event listeners
@@ -1716,11 +1725,13 @@ function getTextualInversionSettings(): TextualInversionConfig[] {
             const enabledInput = container.querySelectorAll('.textual-inversion-enabled')[index] as HTMLInputElement;
             const tagsInput = container.querySelectorAll('.textual-inversion-tags')[index] as HTMLInputElement;
             
+            const negativeInput = container.querySelectorAll('.textual-inversion-negative')[index] as HTMLInputElement;
             textualInversions.push({
                 name: name,
                 trigger: triggerInput.value.trim() || name,
                 enabled: enabledInput.checked,
-                tags: tagsInput?.value?.trim() || ''
+                tags: tagsInput?.value?.trim() || '',
+                isNegative: negativeInput?.checked || false
             });
         }
     });
@@ -2884,6 +2895,7 @@ function showDatabaseOverlay(): void {
     if (modal) {
         modal.classList.remove('hidden');
         refreshDatabaseData();
+        setupStoryManagementHandlers();
     }
 }
 
@@ -2976,6 +2988,9 @@ async function refreshDatabaseData(): Promise<void> {
                 currentGameElement.innerHTML = '<span class="text-gray-500">No active game session</span>';
             }
         }
+        
+        // Update story management tab - load story sessions
+        await loadStorySessions();
         
         if (statusElement) {
             statusElement.textContent = 'Data loaded successfully';

@@ -41,9 +41,9 @@ const defaultConfig: GameConfig = {
         ],
         textualInversions: [
             // Example Textual Inversion configurations - you can add your own
-            // { name: 'bad_prompt_version2', enabled: true, trigger: 'bad_prompt_version2', tags: 'negative prompt' },
-            // { name: 'EasyNegative', enabled: true, trigger: 'EasyNegative', tags: 'negative prompt, clean' },
-            // { name: 'style_enhancement', enabled: false, trigger: 'style_enhancement', tags: 'artistic, enhanced' }
+            // { name: 'bad_prompt_version2', enabled: true, trigger: 'bad_prompt_version2', tags: 'negative prompt', isNegative: true },
+            // { name: 'EasyNegative', enabled: true, trigger: 'EasyNegative', tags: 'negative prompt, clean', isNegative: true },
+            // { name: 'style_enhancement', enabled: false, trigger: 'style_enhancement', tags: 'artistic, enhanced', isNegative: false }
         ]
     },
 
@@ -62,6 +62,21 @@ const defaultConfig: GameConfig = {
         autoDeleteOldStories: false, // Don't auto-delete by default
         maxStoriesToKeep: 50, // Keep up to 50 stories
         storyRetentionDays: 30 // Keep stories for 30 days
+    },
+    memories: {
+        enabled: true, // Memory system is enabled by default
+        maxMemories: 10, // Keep up to 10 memories per session
+        memoryRetentionDays: 30, // Keep memories for 30 days
+        autoCleanup: true, // Automatically clean up old memories
+        memoryImportance: 'medium', // Medium importance for memories in context
+        includeInContext: true, // Include memories in LLM context
+        memoryTypes: {
+            character: true, // Character-related memories
+            location: true, // Location-related memories
+            item: true, // Item-related memories
+            event: true, // Event-related memories
+            relationship: true // Relationship-related memories
+        }
     },
     enableAudio: false,
     enableIcons: false,
@@ -216,6 +231,14 @@ function mergeConfig(defaultConfig: GameConfig, userConfig: Partial<GameConfig>)
 
         logging: { ...defaultConfig.logging, ...userConfig.logging },
         database: { ...defaultConfig.database, ...userConfig.database },
+        memories: { 
+            ...defaultConfig.memories, 
+            ...userConfig.memories,
+            memoryTypes: { 
+                ...defaultConfig.memories.memoryTypes, 
+                ...userConfig.memories?.memoryTypes 
+            }
+        },
         enableAudio: userConfig.enableAudio ?? defaultConfig.enableAudio,
         enableIcons: userConfig.enableIcons ?? defaultConfig.enableIcons,
         gameName: userConfig.gameName ?? defaultConfig.gameName
@@ -301,6 +324,19 @@ export function validateConfig(config: GameConfig): { valid: boolean; errors: st
 
     if (config.stableDiffusion.options.height < 64 || config.stableDiffusion.options.height > 2048) {
         result.warnings.push('SD height should be between 64 and 2048');
+    }
+
+    // Validate Memories configuration
+    if (config.memories.maxMemories < 1 || config.memories.maxMemories > 100) {
+        result.warnings.push('Max memories should be between 1 and 100');
+    }
+
+    if (config.memories.memoryRetentionDays < 1 || config.memories.memoryRetentionDays > 365) {
+        result.warnings.push('Memory retention days should be between 1 and 365');
+    }
+
+    if (!['low', 'medium', 'high'].includes(config.memories.memoryImportance)) {
+        result.warnings.push('Memory importance should be low, medium, or high');
     }
 
     return result;

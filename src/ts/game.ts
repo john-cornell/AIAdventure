@@ -754,6 +754,12 @@ export async function updateGame(choice: string): Promise<void> {
     // Build enhanced choice with context in priority order
     let enhancedChoice = finalChoice;
     
+    // 0. INITIAL PROMPT CONTEXT (only for first call when starting new game)
+    if (gameState.storyLog.length === 0 && currentSession?.initialPrompt) {
+        enhancedChoice = `INITIAL STORY PROMPT: ${currentSession.initialPrompt}\n\n${enhancedChoice}`;
+        logInfo('Game', `Added initial prompt context: ${currentSession.initialPrompt}`);
+    }
+    
     // 1. STORY SUMMARY FIRST (always include for context)
     const storySummaryContext = await getStorySummaryContext();
     if (storySummaryContext) {
@@ -923,7 +929,7 @@ export function exportGameState(): string {
     const exportData = {
         gameState: gameState,
         exportDate: new Date().toISOString(),
-        version: '1.0.8'
+        version: '1.0.9'
     };
     return JSON.stringify(exportData, null, 2);
 }
@@ -1010,11 +1016,27 @@ export function resetGame(): void {
 /**
  * Get memories for LLM context
  */
-export function getMemoriesContext(): string {
+export async function getMemoriesContext(): Promise<string> {
+    const config = await loadConfig();
+    
+    // Check if memories are enabled and should be included in context
+    if (!config.memories.enabled || !config.memories.includeInContext) {
+        return '';
+    }
+    
     if (gameState.memories.length === 0) {
         return '';
     }
-    return `[Memories: ${gameState.memories.join(', ')}]`;
+    
+    // Limit memories based on config
+    const maxMemories = config.memories.maxMemories;
+    const memoriesToInclude = gameState.memories.slice(-maxMemories);
+    
+    // Add importance indicator based on config
+    const importancePrefix = config.memories.memoryImportance === 'high' ? 'IMPORTANT ' : 
+                           config.memories.memoryImportance === 'medium' ? '' : 'Note: ';
+    
+    return `[${importancePrefix}Memories: ${memoriesToInclude.join(', ')}]`;
 }
 
 /**
@@ -1098,7 +1120,7 @@ export function exportSessionData(): string {
         session: currentSession,
         gameState: gameState,
         exportDate: new Date().toISOString(),
-        version: '1.0.8'
+        version: '1.0.9'
     };
     return JSON.stringify(exportData, null, 2);
 }
