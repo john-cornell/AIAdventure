@@ -515,12 +515,42 @@ export async function executeLLMCall(retries: number = 3): Promise<void> {
 }
 
 /**
+ * Analyze choice for risk level
+ */
+function analyzeRiskLevel(choice: string): number {
+    const riskyKeywords = [
+        'attack', 'fight', 'kill', 'destroy', 'explode', 'burn', 'poison', 'curse',
+        'steal', 'rob', 'break', 'smash', 'jump', 'climb', 'swim', 'dive',
+        'run', 'escape', 'sneak', 'spy', 'lie', 'cheat', 'betray', 'sacrifice',
+        'dangerous', 'risky', 'foolish', 'reckless', 'desperate', 'suicidal'
+    ];
+    
+    const choiceLower = choice.toLowerCase();
+    let riskScore = 0;
+    
+    riskyKeywords.forEach(keyword => {
+        if (choiceLower.includes(keyword)) {
+            riskScore += 1;
+        }
+    });
+    
+    // Normalize risk score (0-1 scale)
+    return Math.min(riskScore / 3, 1);
+}
+
+/**
  * Determine the outcome of a player action
  */
-function determineOutcome(): 'Success' | 'Partial Success' | 'Failure' {
-    const roll = Math.random();
-    if (roll < 0.15) return 'Failure';
-    if (roll < 0.50) return 'Partial Success';
+function determineOutcome(choice: string): 'Success' | 'Partial Success' | 'Failure' {
+    const riskLevel = analyzeRiskLevel(choice);
+    const baseRoll = Math.random();
+    
+    // Adjust roll based on risk level
+    // Higher risk = higher chance of failure
+    const adjustedRoll = baseRoll + (riskLevel * 0.3);
+    
+    if (adjustedRoll < 0.15) return 'Failure';
+    if (adjustedRoll < 0.50) return 'Partial Success';
     return 'Success';
 }
 
@@ -539,7 +569,7 @@ export async function updateGame(choice: string): Promise<void> {
     }
 
     // Determine outcome for this action
-    const outcome = determineOutcome();
+    const outcome = determineOutcome(choice);
     let finalChoice = choice;
     
     // Add outcome prefix to the choice (only for actions after the first one)
@@ -557,14 +587,20 @@ export async function updateGame(choice: string): Promise<void> {
         logDebug('Game', `Added memories context: ${memoriesContext}`);
     }
     
-    // Add story summary context
-    const storySummaryContext = await getStorySummaryContext();
-    if (storySummaryContext) {
-        enhancedChoice = `${storySummaryContext} ${enhancedChoice}`;
-        logInfo('Game', `Added story summary context (${storySummaryContext.length} chars)`);
-        logDebug('Game', `Story summary content: ${storySummaryContext.substring(0, 200)}...`);
+    // Add story summary context (only occasionally to avoid overwhelming the LLM)
+    // Add it every 5th action or when the story is getting long
+    const shouldAddSummary = gameState.actionLog.length % 5 === 0 || gameState.messageHistory.length > 20;
+    if (shouldAddSummary) {
+        const storySummaryContext = await getStorySummaryContext();
+        if (storySummaryContext) {
+            enhancedChoice = `${storySummaryContext} ${enhancedChoice}`;
+            logInfo('Game', `Added story summary context (${storySummaryContext.length} chars)`);
+            logDebug('Game', `Story summary content: ${storySummaryContext.substring(0, 200)}...`);
+        } else {
+            logDebug('Game', 'No story summary context available');
+        }
     } else {
-        logDebug('Game', 'No story summary context available');
+        logDebug('Game', 'Skipping story summary context to avoid LLM overload');
     }
 
     // Add user choice to message history
@@ -705,7 +741,7 @@ export function exportGameState(): string {
     const exportData = {
         gameState: gameState,
         exportDate: new Date().toISOString(),
-        version: '1.0.5'
+        version: '1.0.6'
     };
     return JSON.stringify(exportData, null, 2);
 }
@@ -880,7 +916,7 @@ export function exportSessionData(): string {
         session: currentSession,
         gameState: gameState,
         exportDate: new Date().toISOString(),
-        version: '1.0.5'
+        version: '1.0.6'
     };
     return JSON.stringify(exportData, null, 2);
 }
