@@ -450,7 +450,7 @@ function createSettingsModalHTML(): string {
                                 </div>
                             </div>
                             
-                            <div class="flex items-center gap-4">
+                            <div class="flex items-center gap-6">
                                 <button id="test-ollama" 
                                         class="bg-blue-600 hover:bg-blue-500 text-white px-4 py-2 rounded-lg">
                                     🔌 Test Connection
@@ -588,7 +588,7 @@ function createSettingsModalHTML(): string {
                                 </div>
                             </div>
                             
-                            <div class="flex items-center gap-4">
+                            <div class="flex items-center gap-6">
                                 <button id="test-sd" 
                                         class="bg-green-600 hover:bg-green-500 text-white px-4 py-2 rounded-lg">
                                     🖼️ Test Connection

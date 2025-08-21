@@ -35,15 +35,15 @@ const defaultConfig: GameConfig = {
         faceRestoration: 'auto', // 'auto', 'always', 'never'
         loras: [
             // Example LORA configurations - you can add your own
-            // { name: 'lcm_lora_sdxl', strength: 0.8, enabled: true, tags: 'lcm, fast generation' },
-            // { name: 'detail_tweaker_lora', strength: 0.6, enabled: true, tags: 'detailed, high quality, sharp' },
-            // { name: 'realistic_vision_v5', strength: 0.7, enabled: false, tags: 'realistic, photorealistic, natural' }
+            { name: 'lcm_lora_sdxl', strength: 0.8, enabled: false, tags: 'lcm, fast generation' },
+            { name: 'detail_tweaker_lora', strength: 0.6, enabled: false, tags: 'detailed, high quality, sharp' },
+            { name: 'realistic_vision_v5', strength: 0.7, enabled: false, tags: 'realistic, photorealistic, natural' }
         ],
         textualInversions: [
             // Example Textual Inversion configurations - you can add your own
-            // { name: 'bad_prompt_version2', enabled: true, trigger: 'bad_prompt_version2', tags: 'negative prompt', isNegative: true },
-            // { name: 'EasyNegative', enabled: true, trigger: 'EasyNegative', tags: 'negative prompt, clean', isNegative: true },
-            // { name: 'style_enhancement', enabled: false, trigger: 'style_enhancement', tags: 'artistic, enhanced', isNegative: false }
+            { name: 'bad_prompt_version2', enabled: false, trigger: 'bad_prompt_version2', tags: 'negative prompt', isNegative: true },
+            { name: 'EasyNegative', enabled: false, trigger: 'EasyNegative', tags: 'negative prompt, clean', isNegative: true },
+            { name: 'style_enhancement', enabled: false, trigger: 'style_enhancement', tags: 'artistic, enhanced', isNegative: false }
         ]
     },
 
