@@ -40,7 +40,8 @@ const jsonFields = [
 
 // System prompt for the game
 const systemPrompt = `You are an expert storyteller creating an interactive adventure game. Generate responses in JSON format with the following structure:
-
+YOU MUST RESPOND DIRECTLY TO THE USER'S COMMAND.
+YOU MUST PROVIDE FOUR UNIQUE CHOICES.
 {
   "story": "A vivid, engaging description of the current scene and what happens next",
   "image_prompt": "A detailed visual description for generating an image of this scene",
@@ -52,7 +53,8 @@ const systemPrompt = `You are an expert storyteller creating an interactive adve
 CRITICAL INSTRUCTIONS:
 1. The user's command/action is the PRIMARY driver of what happens next
 2. ALWAYS respond directly to what the user wants to do
-3. The user's action will sometimes be prefixed with an [Outcome: ...]. You MUST respect this outcome in your generated story.
+3. The user's action will sometimes be prefixed with an [Outcome: ...]. 
+   You MUST respect this outcome in your generated story.
    - [Outcome: Success]: The user's action succeeds fully and as intended.
    - [Outcome: Partial Success]: The user's action succeeds, but with an unexpected twist, complication, or partial result.
    - [Outcome: Failure]: The user's action fails, possibly with a negative consequence.
@@ -921,7 +923,7 @@ export function exportGameState(): string {
     const exportData = {
         gameState: gameState,
         exportDate: new Date().toISOString(),
-        version: '1.0.7'
+        version: '1.0.8'
     };
     return JSON.stringify(exportData, null, 2);
 }
@@ -1096,7 +1098,7 @@ export function exportSessionData(): string {
         session: currentSession,
         gameState: gameState,
         exportDate: new Date().toISOString(),
-        version: '1.0.7'
+        version: '1.0.8'
     };
     return JSON.stringify(exportData, null, 2);
 }
