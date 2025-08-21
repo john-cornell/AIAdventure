@@ -52,6 +52,7 @@ export interface StoryEntry {
 export interface ActionEntry {
     choice: string;
     timestamp: number;
+    outcome?: 'Success' | 'Partial Success' | 'Failure' | 'Start';
 }
 
 // Configuration types

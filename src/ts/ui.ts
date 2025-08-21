@@ -2603,13 +2603,25 @@ function updateHistoryDisplay(): void {
         const timestamp = new Date(action.timestamp).toLocaleString();
         const choice = action.choice;
         
+        // Determine outcome color and text
+        let outcomeColor = 'text-gray-400';
+        let outcomeText = action.outcome || 'Start';
+        
+        if (action.outcome === 'Success') outcomeColor = 'text-green-400';
+        if (action.outcome === 'Partial Success') outcomeColor = 'text-yellow-400';
+        if (action.outcome === 'Failure') outcomeColor = 'text-red-400';
+        if (!action.outcome) outcomeColor = 'text-indigo-400';
+        
         historyEntry.innerHTML = `
             <div class="flex justify-between items-start">
-                <div>
+                <div class="flex-grow">
                     <p class="text-gray-400 text-sm">${timestamp}</p>
                     <p class="text-white font-medium">${choice}</p>
                 </div>
-                <span class="text-gray-500 text-sm">#${index + 1}</span>
+                <div class="flex flex-col items-end">
+                    <span class="text-gray-500 text-sm">#${index + 1}</span>
+                    <span class="font-bold ${outcomeColor}">${outcomeText}</span>
+                </div>
             </div>
         `;
         

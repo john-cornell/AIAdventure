@@ -49,6 +49,12 @@ const systemPrompt = `You are an expert storyteller creating an interactive adve
   "new_memories": ["Important memory 1", "Important memory 2"]
 }
 
+IMPORTANT: The user's action will sometimes be prefixed with an [Outcome: ...]. You MUST respect this outcome in your generated story.
+- [Outcome: Success]: The user's action succeeds fully and as intended.
+- [Outcome: Partial Success]: The user's action succeeds, but with an unexpected twist, complication, or partial result.
+- [Outcome: Failure]: The user's action fails, possibly with a negative consequence.
+- If there is no outcome prefix, treat the input as the story's starting point or a neutral narrative progression.
+
 Keep the story engaging, descriptive, and responsive to player choices. The story should be immersive and allow for meaningful player agency.`;
 
 // Context management settings
@@ -509,6 +515,16 @@ export async function executeLLMCall(retries: number = 3): Promise<void> {
 }
 
 /**
+ * Determine the outcome of a player action
+ */
+function determineOutcome(): 'Success' | 'Partial Success' | 'Failure' {
+    const roll = Math.random();
+    if (roll < 0.15) return 'Failure';
+    if (roll < 0.50) return 'Partial Success';
+    return 'Success';
+}
+
+/**
  * Handle user choice selection
  */
 export async function updateGame(choice: string): Promise<void> {
@@ -522,8 +538,17 @@ export async function updateGame(choice: string): Promise<void> {
         currentSession.lastPlayedAt = Date.now();
     }
 
+    // Determine outcome for this action
+    const outcome = determineOutcome();
+    let finalChoice = choice;
+    
+    // Add outcome prefix to the choice (only for actions after the first one)
+    if (gameState.messageHistory.length > 0) {
+        finalChoice = `[Outcome: ${outcome}] ${choice}`;
+    }
+
     // Build enhanced choice with context
-    let enhancedChoice = choice;
+    let enhancedChoice = finalChoice;
     
     // Add memories context
     const memoriesContext = getMemoriesContext();
@@ -548,10 +573,11 @@ export async function updateGame(choice: string): Promise<void> {
         content: enhancedChoice
     });
 
-    // Add to action log
+    // Add to action log with outcome
     const actionEntry: ActionEntry = {
         choice: choice,
-        timestamp: Date.now()
+        timestamp: Date.now(),
+        outcome: outcome
     };
     gameState.actionLog.push(actionEntry);
 
@@ -679,7 +705,7 @@ export function exportGameState(): string {
     const exportData = {
         gameState: gameState,
         exportDate: new Date().toISOString(),
-        version: '1.0.4'
+        version: '1.0.5'
     };
     return JSON.stringify(exportData, null, 2);
 }
@@ -699,6 +725,24 @@ export function importGameState(jsonString: string): { success: boolean; error?:
         const importedState = importData.gameState as GameState;
         if (!importedState.messageHistory || !importedState.storyLog || !importedState.actionLog) {
             return { success: false, error: 'Missing required game state fields' };
+        }
+
+        // Handle legacy data that doesn't have outcomes
+        if (importedState.actionLog && importedState.actionLog.length > 0) {
+            importedState.actionLog.forEach((action, index) => {
+                if (!action.outcome) {
+                    // For legacy data, assign outcomes based on position
+                    if (index === 0) {
+                        action.outcome = 'Start';
+                    } else {
+                        // Randomly assign outcomes for legacy actions
+                        const roll = Math.random();
+                        if (roll < 0.15) action.outcome = 'Failure';
+                        else if (roll < 0.50) action.outcome = 'Partial Success';
+                        else action.outcome = 'Success';
+                    }
+                }
+            });
         }
 
         gameState = importedState;
@@ -836,7 +880,7 @@ export function exportSessionData(): string {
         session: currentSession,
         gameState: gameState,
         exportDate: new Date().toISOString(),
-        version: '1.0.4'
+        version: '1.0.5'
     };
     return JSON.stringify(exportData, null, 2);
 }
