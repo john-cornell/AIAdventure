@@ -34,8 +34,8 @@ export async function callLocalLLM(
         ...messageHistory
     ];
     
-    // Convert messages to a single prompt string
-    const prompt = messages.map(msg => `${msg.role === 'system' ? 'System: ' : 'User: '}${msg.content}`).join('\n\n') + '\n\nAssistant: ONLY RETURN THE NEXT STEP AS JSON. DO NOT INCLUDE CONVERSATION HISTORY OR PREVIOUS RESPONSES.';
+    // Convert messages to a single prompt string with stronger formatting instructions
+    const prompt = messages.map(msg => `${msg.role === 'system' ? 'System: ' : 'User: '}${msg.content}`).join('\n\n') + '\n\nAssistant: RESPOND WITH ONLY A COMPLETE JSON OBJECT. NO OTHER TEXT. NO EXPLANATIONS. NO MARKDOWN. JUST THE JSON.';
     console.log('📝 callLocalLLM: Prompt length:', prompt.length, 'characters');
 
     try {
@@ -142,7 +142,45 @@ export async function callLocalLLM(
             console.error('❌ callLocalLLM: Missing required fields:', missingFields.map(f => f.name));
             console.error('❌ callLocalLLM: Full parsed response:', parsedResponse);
             console.error('❌ callLocalLLM: Raw LLM response:', data.response);
-            throw new Error(`Missing required fields: ${missingFields.map(f => f.name).join(', ')}`);
+            
+            // Provide more helpful error message
+            const missingFieldNames = missingFields.map(f => f.name).join(', ');
+            const errorMessage = `LLM response incomplete. Missing required fields: ${missingFieldNames}. 
+Expected format: {"story": "...", "image_prompt": "...", "choices": ["...", "...", "...", "..."], "ambience_prompt": "..."}
+Received: ${JSON.stringify(parsedResponse)}`;
+            
+            throw new Error(errorMessage);
+        }
+
+        // Validate and fix choices array if needed
+        if (parsedResponse.choices && Array.isArray(parsedResponse.choices)) {
+            if (parsedResponse.choices.length < 4) {
+                console.warn('⚠️ callLocalLLM: Choices array has fewer than 4 elements, adding default choices');
+                console.log('📝 callLocalLLM: Original choices:', parsedResponse.choices);
+                
+                // Add default choices to reach 4 total
+                const defaultChoices = [
+                    "Continue exploring",
+                    "Investigate further", 
+                    "Take action",
+                    "Proceed carefully"
+                ];
+                
+                // Add missing choices from defaults
+                while (parsedResponse.choices.length < 4) {
+                    const defaultChoice = defaultChoices[parsedResponse.choices.length];
+                    parsedResponse.choices.push(defaultChoice);
+                }
+                
+                console.log('✅ callLocalLLM: Fixed choices array:', parsedResponse.choices);
+            } else if (parsedResponse.choices.length > 4) {
+                console.warn('⚠️ callLocalLLM: Choices array has more than 4 elements, truncating to first 4');
+                parsedResponse.choices = parsedResponse.choices.slice(0, 4);
+            }
+        } else {
+            console.error('❌ callLocalLLM: Invalid choices array. Expected array with exactly 4 elements.');
+            console.error('❌ callLocalLLM: Choices received:', parsedResponse.choices);
+            throw new Error(`Invalid choices array. Expected array with exactly 4 elements, got: ${JSON.stringify(parsedResponse.choices)}`);
         }
 
         console.log('✅ callLocalLLM: All validation passed, returning response');
@@ -478,6 +516,11 @@ export function classifyOllamaError(error: Error): ErrorClassification {
     } else if (error.message.includes('Missing required fields')) {
         classification.type = 'validation_error';
         classification.userMessage = 'LLM response missing required information. Please try again.';
+        classification.retryable = true;
+        classification.action = 'retry';
+    } else if (error.message.includes('Invalid choices array')) {
+        classification.type = 'validation_error';
+        classification.userMessage = 'LLM response format issue. Please try again.';
         classification.retryable = true;
         classification.action = 'retry';
     }

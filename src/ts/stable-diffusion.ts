@@ -84,7 +84,7 @@ export async function generateLocalImage(
     console.log('🎨 Negative Textual Inversion Triggers:', negativeTextualInversionTriggers);
 
     // Enhanced positive prompt with LORA syntax, tags and positive Textual Inversion triggers/tags
-    const baseEnhancement = `photorealistic, highly detailed, professional photography, 8k uhd, dslr, high quality, sharp focus, perfect lighting, cinematic lighting, masterpiece, best quality, ultra detailed`;
+    const baseEnhancement = `photorealistic, highly detailed, professional photography, 8k uhd, dslr, high quality, sharp focus, perfect lighting, cinematic lighting, masterpiece, best quality, ultra detailed, dynamic action, motion capture, dramatic composition, action shot`;
     
     // Combine positive enhancement tags
     const positiveEnhancementTags = [

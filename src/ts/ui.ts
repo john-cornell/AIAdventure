@@ -13,7 +13,7 @@ import {
 import { getGameSessionData, getAllDatabaseData, deleteStorySummary as deleteStorySummaryFromDatabase } from './database.js';
 import { callLocalLLMWithRetry, getAvailableOllamaModels, testOllamaConnection as testOllama } from './ollama.js';
 import { generateLocalImageWithRetry, getAvailableSDModels, getAvailableLoraModels, getAvailableTextualInversionModels, testSDConnection as testSD } from './stable-diffusion.js';
-import { startGame, updateGame, getGameState, resetGame, updateGameState } from './game.js';
+import { startGame, updateGame, getGameState, resetGame, updateGameState, autoSummarizeSteps } from './game.js';
 
 // UI State Management
 let uiState: UIState = {
@@ -276,7 +276,13 @@ function createSettingsModalHTML(): string {
                     <!-- Configuration Management Tab -->
                     <div id="tab-content-config" class="tab-content active">
                         <div id="config-management" class="p-4 bg-gray-800 rounded-lg border border-gray-600">
-                            <h3 class="text-lg font-semibold text-white mb-4">Configuration Management</h3>
+                            <div class="flex justify-between items-center mb-4">
+                                <h3 class="text-lg font-semibold text-white">Configuration Management</h3>
+                                <button id="save-config-now" 
+                                        class="bg-indigo-600 hover:bg-indigo-500 text-white px-6 py-2 rounded-lg font-semibold flex items-center gap-2">
+                                    💾 Save Configuration Now
+                                </button>
+                            </div>
                             
                             <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
                                 <div>
@@ -673,26 +679,67 @@ function createDatabaseOverlayHTML(): string {
                     <!-- Story Management Tab -->
                     <div id="db-tab-content-story-management" class="db-tab-content hidden">
                         <div class="p-4 bg-gray-800 rounded-lg border border-gray-600">
-                            <h3 class="text-lg font-semibold text-white mb-4">Story Management</h3>
+                            <div class="flex justify-between items-center mb-4">
+                                <h3 class="text-lg font-semibold text-white">Story Management</h3>
+                                <button id="delete-all-stories" class="bg-red-600 hover:bg-red-500 text-white px-4 py-2 rounded-lg">
+                                    🗑️ Delete All Stories
+                                </button>
+                            </div>
+                            
+                            <!-- Session Selector -->
                             <div class="mb-4">
                                 <label class="block text-sm font-medium text-gray-300 mb-2">Select Session:</label>
                                 <select id="story-session-selector" class="w-full bg-gray-700 border border-gray-600 rounded-lg px-3 py-2 text-white">
                                     <option value="">Loading sessions...</option>
                                 </select>
                             </div>
-                            <div class="mb-4">
-                                <button id="load-game" class="bg-green-600 hover:bg-green-500 text-white px-4 py-2 rounded-lg mr-2">
+                            
+                            <!-- Action Buttons -->
+                            <div class="mb-4 flex gap-2 flex-wrap">
+                                <button id="load-game" class="bg-green-600 hover:bg-green-500 text-white px-4 py-2 rounded-lg">
                                     🎮 Load Game
                                 </button>
-                                <button id="load-story-steps" class="bg-blue-600 hover:bg-blue-500 text-white px-4 py-2 rounded-lg mr-2">
-                                    📖 Load Story Steps
+                                <button id="view-summary-and-steps" class="bg-blue-600 hover:bg-blue-500 text-white px-4 py-2 rounded-lg">
+                                    📖 View Summary & Steps
                                 </button>
-                                <button id="delete-story-steps" class="bg-red-600 hover:bg-red-500 text-white px-4 py-2 rounded-lg">
-                                    🗑️ Delete Story Steps
+                                <button id="delete-session-data" class="bg-red-600 hover:bg-red-500 text-white px-4 py-2 rounded-lg">
+                                    🗑️ Delete Session Data
                                 </button>
                             </div>
-                            <div id="story-steps-container" class="text-sm text-gray-300 font-mono bg-gray-900 p-4 rounded border border-gray-600 max-h-96 overflow-y-auto">
-                                Select a session to view story steps...
+                            
+                            <!-- Summary and Steps Display -->
+                            <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                                <!-- Summary Section -->
+                                <div class="bg-gray-900 rounded-lg border border-gray-600 p-4">
+                                    <h4 class="text-md font-semibold text-white mb-3 flex items-center justify-between">
+                                        <span>📋 Story Summary</span>
+                                        <button id="delete-summary" class="bg-red-600 hover:bg-red-500 text-white px-2 py-1 rounded text-xs">
+                                            🗑️ Delete
+                                        </button>
+                                    </h4>
+                                    <div id="story-summary-container" class="text-sm text-gray-300 max-h-64 overflow-y-auto">
+                                        <span class="text-gray-500">Select a session to view summary...</span>
+                                    </div>
+                                </div>
+                                
+                                <!-- Steps Section -->
+                                <div class="bg-gray-900 rounded-lg border border-gray-600 p-4">
+                                    <h4 class="text-md font-semibold text-white mb-3 flex items-center justify-between">
+                                        <span>📝 Story Steps</span>
+                                        <button id="delete-steps" class="bg-red-600 hover:bg-red-500 text-white px-2 py-1 rounded text-xs">
+                                            🗑️ Delete
+                                        </button>
+                                    </h4>
+                                    <div id="story-steps-container" class="text-sm text-gray-300 max-h-64 overflow-y-auto">
+                                        <span class="text-gray-500">Select a session to view steps...</span>
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            <!-- Session Info -->
+                            <div id="session-info" class="mt-4 p-3 bg-gray-700 rounded-lg border border-gray-600 hidden">
+                                <h4 class="text-md font-semibold text-white mb-2">Session Information</h4>
+                                <div id="session-details" class="text-sm text-gray-300"></div>
                             </div>
                         </div>
                     </div>
@@ -1041,6 +1088,7 @@ function setupSettingsEvents(): void {
                 };
                 const loraElement = createLoraElement(newLora, container.children.length);
                 container.appendChild(loraElement);
+                saveSettingsImmediately(); // Save when new LORA is added
             }
         });
     }
@@ -1060,6 +1108,7 @@ function setupSettingsEvents(): void {
                 };
                 const textualInversionElement = createTextualInversionElement(newTextualInversion, container.children.length);
                 container.appendChild(textualInversionElement);
+                saveSettingsImmediately(); // Save when new Textual Inversion is added
             }
         });
     }
@@ -1112,6 +1161,29 @@ function setupSettingsEvents(): void {
                 showMessage(`Configuration renamed from '${currentName}' to '${newName}'`, 'success');
             } else {
                 showMessage('Failed to rename configuration', 'error');
+            }
+        });
+    }
+    
+    const saveConfigNowBtn = document.getElementById('save-config-now') as HTMLButtonElement;
+    if (saveConfigNowBtn) {
+        saveConfigNowBtn.addEventListener('click', async () => {
+            saveConfigNowBtn.disabled = true;
+            saveConfigNowBtn.textContent = '💾 Saving...';
+            
+            try {
+                const success = await saveSettingsImmediately();
+                if (success) {
+                    showMessage('Configuration saved successfully!', 'success');
+                } else {
+                    showMessage('Failed to save configuration', 'error');
+                }
+            } catch (error) {
+                console.error('Error saving configuration:', error);
+                showMessage('Error saving configuration', 'error');
+            } finally {
+                saveConfigNowBtn.disabled = false;
+                saveConfigNowBtn.innerHTML = '💾 Save Configuration Now';
             }
         });
     }
@@ -1457,11 +1529,33 @@ function createLoraElement(lora: LoraConfig, index: number): HTMLElement {
     // Add event listeners
     const removeBtn = div.querySelector('.remove-lora') as HTMLButtonElement;
     if (removeBtn) {
-        removeBtn.onclick = () => div.remove();
+        removeBtn.onclick = () => {
+            div.remove();
+            saveSettingsImmediately(); // Save when LORA is removed
+        };
+    }
+    
+    // Add change event listeners for automatic saving
+    const nameSelect = div.querySelector('.lora-name') as HTMLSelectElement;
+    const strengthInput = div.querySelector('.lora-strength') as HTMLInputElement;
+    const enabledInput = div.querySelector('.lora-enabled') as HTMLInputElement;
+    const tagsInput = div.querySelector('.lora-tags') as HTMLInputElement;
+    
+    if (nameSelect) {
+        nameSelect.addEventListener('change', () => saveSettingsImmediately());
+    }
+    if (strengthInput) {
+        strengthInput.addEventListener('change', () => saveSettingsImmediately());
+    }
+    if (enabledInput) {
+        enabledInput.addEventListener('change', () => saveSettingsImmediately());
+    }
+    if (tagsInput) {
+        tagsInput.addEventListener('change', () => saveSettingsImmediately());
     }
     
     // Load LORA models into the dropdown
-    loadLoraModelsIntoDropdown(div.querySelector('.lora-name') as HTMLSelectElement, lora.name);
+    loadLoraModelsIntoDropdown(nameSelect, lora.name);
     
     return div;
 }
@@ -1527,11 +1621,37 @@ function createTextualInversionElement(textualInversion: TextualInversionConfig,
     // Add event listeners
     const removeBtn = div.querySelector('.remove-textual-inversion') as HTMLButtonElement;
     if (removeBtn) {
-        removeBtn.onclick = () => div.remove();
+        removeBtn.onclick = () => {
+            div.remove();
+            saveSettingsImmediately(); // Save when Textual Inversion is removed
+        };
+    }
+    
+    // Add change event listeners for automatic saving
+    const nameSelect = div.querySelector('.textual-inversion-name') as HTMLSelectElement;
+    const triggerInput = div.querySelector('.textual-inversion-trigger') as HTMLInputElement;
+    const enabledInput = div.querySelector('.textual-inversion-enabled') as HTMLInputElement;
+    const tagsInput = div.querySelector('.textual-inversion-tags') as HTMLInputElement;
+    const negativeInput = div.querySelector('.textual-inversion-negative') as HTMLInputElement;
+    
+    if (nameSelect) {
+        nameSelect.addEventListener('change', () => saveSettingsImmediately());
+    }
+    if (triggerInput) {
+        triggerInput.addEventListener('change', () => saveSettingsImmediately());
+    }
+    if (enabledInput) {
+        enabledInput.addEventListener('change', () => saveSettingsImmediately());
+    }
+    if (tagsInput) {
+        tagsInput.addEventListener('change', () => saveSettingsImmediately());
+    }
+    if (negativeInput) {
+        negativeInput.addEventListener('change', () => saveSettingsImmediately());
     }
     
     // Load textual inversion models into the dropdown
-    loadTextualInversionModelsIntoDropdown(div.querySelector('.textual-inversion-name') as HTMLSelectElement, textualInversion.name);
+    loadTextualInversionModelsIntoDropdown(nameSelect, textualInversion.name);
     
     return div;
 }
@@ -1625,19 +1745,19 @@ function getLoraSettings(): LoraConfig[] {
     if (!container) return [];
     
     const loras: LoraConfig[] = [];
-    const loraElements = container.querySelectorAll('.lora-name');
+    const loraDivs = container.querySelectorAll('.space-y-2.p-3.bg-gray-700.rounded.border.border-gray-600');
     
-    loraElements.forEach((nameInput, index) => {
-        const name = (nameInput as HTMLSelectElement).value.trim();
-        if (name) {
-            const strengthInput = container.querySelectorAll('.lora-strength')[index] as HTMLInputElement;
-            const enabledInput = container.querySelectorAll('.lora-enabled')[index] as HTMLInputElement;
-            const tagsInput = container.querySelectorAll('.lora-tags')[index] as HTMLInputElement;
-            
+    loraDivs.forEach((loraDiv) => {
+        const nameSelect = loraDiv.querySelector('.lora-name') as HTMLSelectElement;
+        const strengthInput = loraDiv.querySelector('.lora-strength') as HTMLInputElement;
+        const enabledInput = loraDiv.querySelector('.lora-enabled') as HTMLInputElement;
+        const tagsInput = loraDiv.querySelector('.lora-tags') as HTMLInputElement;
+        
+        if (nameSelect && nameSelect.value.trim()) {
             loras.push({
-                name: name,
-                strength: parseFloat(strengthInput.value) || 0.8,
-                enabled: enabledInput.checked,
+                name: nameSelect.value.trim(),
+                strength: parseFloat(strengthInput?.value || '0.8') || 0.8,
+                enabled: enabledInput?.checked || false,
                 tags: tagsInput?.value?.trim() || ''
             });
         }
@@ -1719,20 +1839,20 @@ function getTextualInversionSettings(): TextualInversionConfig[] {
     if (!container) return [];
     
     const textualInversions: TextualInversionConfig[] = [];
-    const nameSelects = container.querySelectorAll('.textual-inversion-name');
+    const textualInversionDivs = container.querySelectorAll('.space-y-2.p-3.bg-gray-700.rounded.border.border-gray-600');
     
-    nameSelects.forEach((nameSelect, index) => {
-        const name = (nameSelect as HTMLSelectElement).value.trim();
-        if (name) {
-            const triggerInput = container.querySelectorAll('.textual-inversion-trigger')[index] as HTMLInputElement;
-            const enabledInput = container.querySelectorAll('.textual-inversion-enabled')[index] as HTMLInputElement;
-            const tagsInput = container.querySelectorAll('.textual-inversion-tags')[index] as HTMLInputElement;
-            
-            const negativeInput = container.querySelectorAll('.textual-inversion-negative')[index] as HTMLInputElement;
+    textualInversionDivs.forEach((textualInversionDiv) => {
+        const nameSelect = textualInversionDiv.querySelector('.textual-inversion-name') as HTMLSelectElement;
+        const triggerInput = textualInversionDiv.querySelector('.textual-inversion-trigger') as HTMLInputElement;
+        const enabledInput = textualInversionDiv.querySelector('.textual-inversion-enabled') as HTMLInputElement;
+        const tagsInput = textualInversionDiv.querySelector('.textual-inversion-tags') as HTMLInputElement;
+        const negativeInput = textualInversionDiv.querySelector('.textual-inversion-negative') as HTMLInputElement;
+        
+        if (nameSelect && nameSelect.value.trim()) {
             textualInversions.push({
-                name: name,
-                trigger: triggerInput.value.trim() || name,
-                enabled: enabledInput.checked,
+                name: nameSelect.value.trim(),
+                trigger: triggerInput?.value?.trim() || nameSelect.value.trim(),
+                enabled: enabledInput?.checked || false,
                 tags: tagsInput?.value?.trim() || '',
                 isNegative: negativeInput?.checked || false
             });
@@ -2040,7 +2160,7 @@ async function saveSettings(): Promise<void> {
 /**
  * Save settings immediately when changes are made
  */
-async function saveSettingsImmediately(): Promise<void> {
+async function saveSettingsImmediately(): Promise<boolean> {
     try {
         const currentLabel = getCurrentConfigLabel();
         const config = await loadConfig(currentLabel);
@@ -2094,9 +2214,12 @@ async function saveSettingsImmediately(): Promise<void> {
         // Update the original settings to current saved state so discard works correctly
         originalSettings = { ...config };
         
+        return true;
+        
     } catch (error) {
         console.error('Failed to save settings immediately:', error);
         showMessage('Failed to save settings automatically', 'error');
+        return false;
     }
 }
 
@@ -2361,6 +2484,11 @@ function showGameScreen(): void {
                                 class="w-10 h-10 bg-gray-800/50 rounded-full hover:bg-gray-700/70 transition-colors flex items-center justify-center text-gray-400 hover:text-white">
                             🔄
                         </button>
+                        <button id="auto-summarize-button" 
+                                class="w-10 h-10 bg-gray-800/50 rounded-full hover:bg-gray-700/70 transition-colors flex items-center justify-center text-gray-400 hover:text-white"
+                                title="Auto-summarize steps and continue from summary">
+                            📋
+                        </button>
                         <button id="toggle-logs-button" 
                                 class="w-10 h-10 bg-gray-800/50 rounded-full hover:bg-gray-700/70 transition-colors flex items-center justify-center text-gray-400 hover:text-white">
                             📝
@@ -2448,11 +2576,38 @@ function showGameScreen(): void {
     // Add event listeners
     const exportBtn = document.getElementById('export-button');
     const resetBtn = document.getElementById('reset-button');
+    const autoSummarizeBtn = document.getElementById('auto-summarize-button');
     const customActionForm = document.getElementById('custom-action-form') as HTMLFormElement;
     const customActionInput = document.getElementById('custom-action-input') as HTMLInputElement;
     
     if (exportBtn) {
         exportBtn.addEventListener('click', () => exportGame());
+    }
+    
+    if (autoSummarizeBtn) {
+        autoSummarizeBtn.addEventListener('click', async () => {
+            if (confirm('This will summarize all current story steps and continue from the summary. The original steps will be saved to the database. Continue?')) {
+                (autoSummarizeBtn as HTMLButtonElement).disabled = true;
+                autoSummarizeBtn.textContent = '⏳';
+                autoSummarizeBtn.title = 'Summarizing...';
+                
+                try {
+                    const result = await autoSummarizeSteps();
+                    if (result.success) {
+                        showMessage('Story steps summarized successfully! Continuing from summary...', 'success');
+                        updateStoryDisplay();
+                    } else {
+                        showMessage(`Failed to summarize: ${result.error}`, 'error');
+                    }
+                } catch (error) {
+                    showMessage(`Error during summarization: ${error}`, 'error');
+                } finally {
+                    (autoSummarizeBtn as HTMLButtonElement).disabled = false;
+                    autoSummarizeBtn.textContent = '📋';
+                    autoSummarizeBtn.title = 'Auto-summarize steps and continue from summary';
+                }
+            }
+        });
     }
     
     // Logging panel event handlers
@@ -2559,6 +2714,23 @@ function switchTab(tabName: 'story' | 'history'): void {
 }
 
 /**
+ * Update auto-summarize button state based on game state
+ */
+function updateAutoSummarizeButtonState(gameState: GameState): void {
+    const autoSummarizeBtn = document.getElementById('auto-summarize-button') as HTMLButtonElement;
+    if (!autoSummarizeBtn) return;
+    
+    // Enable button only when game is playing and there are at least 2 story steps
+    const canSummarize = gameState.currentState === 'PLAYING' && gameState.storyLog.length >= 2;
+    
+    autoSummarizeBtn.disabled = !canSummarize;
+    autoSummarizeBtn.style.opacity = canSummarize ? '1' : '0.5';
+    autoSummarizeBtn.title = canSummarize 
+        ? 'Auto-summarize steps and continue from summary' 
+        : 'Need at least 2 story steps to summarize';
+}
+
+/**
  * Update story display
  */
 function updateStoryDisplay(): void {
@@ -2576,6 +2748,9 @@ function updateStoryDisplay(): void {
         console.error('❌ Missing story content or choices container');
         return;
     }
+    
+    // Update auto-summarize button state
+    updateAutoSummarizeButtonState(gameState);
     
     // Clear previous content
     storyContent.innerHTML = '';
@@ -3352,41 +3527,255 @@ function setupStoryManagementHandlers(): void {
         });
     }
     
-    // Load story steps button
-    const loadButton = document.getElementById('load-story-steps');
-    if (loadButton) {
-        loadButton.addEventListener('click', async () => {
+    // View summary and steps button
+    const viewButton = document.getElementById('view-summary-and-steps');
+    if (viewButton) {
+        viewButton.addEventListener('click', async () => {
             const selector = document.getElementById('story-session-selector') as HTMLSelectElement;
             const sessionId = selector?.value;
             
             if (sessionId) {
-                await loadAndDisplayStorySteps(sessionId);
+                await loadAndDisplaySummaryAndSteps(sessionId);
             } else {
                 showMessage('Please select a session first', 'error');
             }
         });
     }
     
-    // Delete story steps button
-    const deleteButton = document.getElementById('delete-story-steps');
-    if (deleteButton) {
-        deleteButton.addEventListener('click', async () => {
+    // Delete session data button
+    const deleteSessionButton = document.getElementById('delete-session-data');
+    if (deleteSessionButton) {
+        deleteSessionButton.addEventListener('click', async () => {
             const selector = document.getElementById('story-session-selector') as HTMLSelectElement;
             const sessionId = selector?.value;
             
             if (sessionId) {
-                if (confirm(`Are you sure you want to delete all story steps for session ${sessionId}? This action cannot be undone.`)) {
-                    await deleteStorySteps(sessionId);
-                    // Clear the steps display
+                if (confirm(`Are you sure you want to delete ALL data for session ${sessionId}? This will delete both summary and steps. This action cannot be undone.`)) {
+                    await deleteAllSessionData(sessionId);
+                    // Clear displays
+                    const summaryContainer = document.getElementById('story-summary-container');
                     const stepsContainer = document.getElementById('story-steps-container');
-                    if (stepsContainer) {
-                        stepsContainer.innerHTML = 'Story steps deleted...';
+                    const sessionInfo = document.getElementById('session-info');
+                    
+                    if (summaryContainer) summaryContainer.innerHTML = '<span class="text-gray-500">Summary deleted...</span>';
+                    if (stepsContainer) stepsContainer.innerHTML = '<span class="text-gray-500">Steps deleted...</span>';
+                    if (sessionInfo) sessionInfo.classList.add('hidden');
+                    
+                    // Refresh session list
+                    await loadStorySessions();
+                }
+            } else {
+                showMessage('Please select a session first', 'error');
+            }
+        });
+    }
+    
+    // Delete summary button
+    const deleteSummaryButton = document.getElementById('delete-summary');
+    if (deleteSummaryButton) {
+        deleteSummaryButton.addEventListener('click', async () => {
+            const selector = document.getElementById('story-session-selector') as HTMLSelectElement;
+            const sessionId = selector?.value;
+            
+            if (sessionId) {
+                if (confirm(`Are you sure you want to delete the summary for session ${sessionId}? This action cannot be undone.`)) {
+                    await deleteStorySummary(sessionId);
+                    const summaryContainer = document.getElementById('story-summary-container');
+                    if (summaryContainer) {
+                        summaryContainer.innerHTML = '<span class="text-gray-500">Summary deleted...</span>';
                     }
                 }
             } else {
                 showMessage('Please select a session first', 'error');
             }
         });
+    }
+    
+    // Delete steps button
+    const deleteStepsButton = document.getElementById('delete-steps');
+    if (deleteStepsButton) {
+        deleteStepsButton.addEventListener('click', async () => {
+            const selector = document.getElementById('story-session-selector') as HTMLSelectElement;
+            const sessionId = selector?.value;
+            
+            if (sessionId) {
+                if (confirm(`Are you sure you want to delete all story steps for session ${sessionId}? This action cannot be undone.`)) {
+                    await deleteStorySteps(sessionId);
+                    const stepsContainer = document.getElementById('story-steps-container');
+                    if (stepsContainer) {
+                        stepsContainer.innerHTML = '<span class="text-gray-500">Steps deleted...</span>';
+                    }
+                }
+            } else {
+                showMessage('Please select a session first', 'error');
+            }
+        });
+    }
+    
+    // Delete all stories button
+    const deleteAllButton = document.getElementById('delete-all-stories');
+    if (deleteAllButton) {
+        deleteAllButton.addEventListener('click', async () => {
+            if (confirm('Are you sure you want to delete ALL stories from the database? This will delete all summaries and steps. This action cannot be undone.')) {
+                await deleteAllStories();
+                // Clear displays
+                const summaryContainer = document.getElementById('story-summary-container');
+                const stepsContainer = document.getElementById('story-steps-container');
+                const sessionInfo = document.getElementById('session-info');
+                
+                if (summaryContainer) summaryContainer.innerHTML = '<span class="text-gray-500">All stories deleted...</span>';
+                if (stepsContainer) stepsContainer.innerHTML = '<span class="text-gray-500">All stories deleted...</span>';
+                if (sessionInfo) sessionInfo.classList.add('hidden');
+                
+                // Refresh session list
+                await loadStorySessions();
+                showMessage('All stories deleted successfully', 'success');
+            }
+        });
+    }
+    
+    // Session selector change event
+    const sessionSelector = document.getElementById('story-session-selector') as HTMLSelectElement;
+    if (sessionSelector) {
+        sessionSelector.addEventListener('change', async () => {
+            const sessionId = sessionSelector.value;
+            if (sessionId) {
+                await loadAndDisplaySummaryAndSteps(sessionId);
+            } else {
+                // Clear displays when no session selected
+                const summaryContainer = document.getElementById('story-summary-container');
+                const stepsContainer = document.getElementById('story-steps-container');
+                const sessionInfo = document.getElementById('session-info');
+                
+                if (summaryContainer) summaryContainer.innerHTML = '<span class="text-gray-500">Select a session to view summary...</span>';
+                if (stepsContainer) stepsContainer.innerHTML = '<span class="text-gray-500">Select a session to view steps...</span>';
+                if (sessionInfo) sessionInfo.classList.add('hidden');
+            }
+        });
+    }
+}
+
+/**
+ * Load and display both summary and steps for a session
+ */
+async function loadAndDisplaySummaryAndSteps(sessionId: string): Promise<void> {
+    try {
+        // Load summary
+        const { loadStorySummary } = await import('./database.js');
+        const summary = await loadStorySummary(sessionId);
+        const summaryContainer = document.getElementById('story-summary-container');
+        
+        if (summaryContainer) {
+            if (summary) {
+                summaryContainer.innerHTML = `
+                    <div class="space-y-2">
+                        <div class="text-white font-semibold">Summary:</div>
+                        <div class="text-gray-300">${summary.summary}</div>
+                        <div class="text-xs text-gray-500 mt-2">
+                            Created: ${new Date(summary.created_at).toLocaleString()}
+                        </div>
+                    </div>
+                `;
+            } else {
+                summaryContainer.innerHTML = '<span class="text-gray-500">No summary found for this session</span>';
+            }
+        }
+        
+        // Load steps
+        const { loadStorySteps } = await import('./database.js');
+        const steps = await loadStorySteps(sessionId);
+        const stepsContainer = document.getElementById('story-steps-container');
+        
+        if (stepsContainer) {
+            if (steps.length > 0) {
+                const stepsHtml = steps.map(step => `
+                    <div class="border-b border-gray-700 pb-2 mb-2">
+                        <div class="text-white font-semibold">Step ${step.step_number}</div>
+                        <div class="text-gray-300 text-xs">${new Date(step.timestamp).toLocaleString()}</div>
+                        <div class="text-gray-300 mt-1">${step.story_text}</div>
+                        ${step.choice ? `<div class="text-blue-300 text-xs mt-1">Choice: ${step.choice}</div>` : ''}
+                    </div>
+                `).join('');
+                
+                stepsContainer.innerHTML = `
+                    <div class="space-y-2">
+                        <div class="text-white font-semibold mb-2">Story Steps (${steps.length}):</div>
+                        ${stepsHtml}
+                    </div>
+                `;
+            } else {
+                stepsContainer.innerHTML = '<span class="text-gray-500">No story steps found for this session</span>';
+            }
+        }
+        
+        // Show session info
+        const sessionInfo = document.getElementById('session-info');
+        const sessionDetails = document.getElementById('session-details');
+        if (sessionInfo && sessionDetails) {
+            sessionDetails.innerHTML = `
+                <div class="grid grid-cols-2 gap-4 text-sm">
+                    <div><span class="text-gray-400">Session ID:</span> ${sessionId}</div>
+                    <div><span class="text-gray-400">Summary:</span> ${summary ? 'Yes' : 'No'}</div>
+                    <div><span class="text-gray-400">Steps:</span> ${steps.length}</div>
+                    <div><span class="text-gray-400">Last Updated:</span> ${steps.length > 0 ? new Date(steps[steps.length - 1].timestamp).toLocaleString() : 'N/A'}</div>
+                </div>
+            `;
+            sessionInfo.classList.remove('hidden');
+        }
+        
+    } catch (error) {
+        console.error('Error loading summary and steps:', error);
+        showMessage('Error loading session data', 'error');
+    }
+}
+
+/**
+ * Delete all data for a session (summary and steps)
+ */
+async function deleteAllSessionData(sessionId: string): Promise<void> {
+    try {
+        const { deleteStorySummary, deleteStorySteps } = await import('./database.js');
+        
+        // Delete summary
+        await deleteStorySummary(sessionId);
+        
+        // Delete steps
+        await deleteStorySteps(sessionId);
+        
+        showMessage(`All data for session ${sessionId} deleted successfully`, 'success');
+        
+    } catch (error) {
+        console.error('Error deleting session data:', error);
+        showMessage('Error deleting session data', 'error');
+    }
+}
+
+/**
+ * Delete all stories from the database
+ */
+async function deleteAllStories(): Promise<void> {
+    try {
+        const { getAllStoryStepSessions, getAllStorySummarySessions, deleteStorySummary, deleteStorySteps } = await import('./database.js');
+        
+        // Get all sessions
+        const stepSessions = await getAllStoryStepSessions();
+        const summarySessions = await getAllStorySummarySessions();
+        
+        // Delete all summaries
+        for (const sessionId of summarySessions) {
+            await deleteStorySummary(sessionId);
+        }
+        
+        // Delete all steps
+        for (const sessionId of stepSessions) {
+            await deleteStorySteps(sessionId);
+        }
+        
+        showMessage(`Deleted ${summarySessions.length} summaries and ${stepSessions.length} step sessions`, 'success');
+        
+    } catch (error) {
+        console.error('Error deleting all stories:', error);
+        showMessage('Error deleting all stories', 'error');
     }
 }
 

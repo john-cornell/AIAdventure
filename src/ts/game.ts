@@ -38,21 +38,41 @@ const jsonFields = [
     // new_memories is optional - not every story beat needs to create memories
 ];
 
-// System prompt for the game
-const systemPrompt = `You are an expert storyteller creating an interactive adventure game. Generate responses in JSON format with the following structure:
-YOU MUST RESPOND DIRECTLY TO THE USER'S COMMAND.
-YOU MUST PROVIDE FOUR UNIQUE CHOICES.
+// Simplified fallback prompt for when the main prompt fails
+const fallbackPrompt = `You are a storyteller. Respond with ONLY a JSON object containing:
+{
+  "story": "A brief description of what happens next",
+  "image_prompt": "A simple visual description",
+  "choices": ["Choice 1", "Choice 2", "Choice 3", "Choice 4"],
+  "ambience_prompt": "Background sounds",
+  "new_memories": []
+}
 
-RESPONSE FORMAT - RETURN ONLY VALID JSON:
+NO OTHER TEXT. JUST THE JSON.`;
+
+// System prompt for the game
+const systemPrompt = `You are an expert storyteller creating an interactive adventure game. 
+
+🚨 CRITICAL: You MUST return a COMPLETE JSON object with ALL required fields. NO EXCEPTIONS.
+
+REQUIRED JSON RESPONSE FORMAT:
 {
   "story": "A vivid, engaging description of the current scene and what happens next",
-  "image_prompt": "A detailed visual description for generating an image of this scene",
+  "image_prompt": "A detailed visual description for generating an image of this scene", 
   "choices": ["Choice 1", "Choice 2", "Choice 3", "Choice 4"],
   "ambience_prompt": "A brief description of the ambient sounds/music for this scene",
   "new_memories": ["Important memory 1", "Important memory 2"]
 }
 
-CRITICAL INSTRUCTIONS:
+🚨 VALIDATION RULES:
+- You MUST include ALL 4 required fields: story, image_prompt, choices, ambience_prompt
+- choices MUST be an array with EXACTLY 4 unique choices (no more, no less)
+- new_memories is optional - only include if there are SALIENT STORY POINTS worth remembering
+- Return ONLY the JSON object, no other text
+- NO markdown formatting, NO code blocks, NO explanations
+- CRITICAL: Always provide exactly 4 choices, never 3 or 5
+
+GAME INSTRUCTIONS:
 1. The user's command/action is the PRIMARY driver of what happens next
 2. ALWAYS respond directly to what the user wants to do
 3. The user's action will sometimes be prefixed with an [Outcome: ...]. 
@@ -65,11 +85,52 @@ CRITICAL INSTRUCTIONS:
 4. Use the provided context (summary, recent steps, memories) to inform your response, but the user's command takes priority
 5. Keep the story engaging, descriptive, and responsive to player choices
 6. The story should be immersive and allow for meaningful player agency
-7. ALWAYS return valid JSON with ALL required fields: story, image_prompt, choices, ambience_prompt
-8. DO NOT include any text before or after the JSON object
-9. DO NOT use markdown formatting or code blocks
 
-REMEMBER: The user's command is what drives the story forward. Respond to it directly and meaningfully.`;
+IMAGE PROMPT GUIDELINES:
+- The image_prompt MUST capture the SPECIFIC ACTION the user commanded
+- Focus on the moment of action, not just the scene
+- Include dynamic elements that show the action happening
+- Describe the character performing the action clearly
+- Show the immediate consequences or results of the action
+- Use action verbs and descriptive language that conveys movement
+- If the user's action involves interaction with objects/people, show that interaction
+- Make the image feel like a snapshot of the action in progress
+
+CHOICE GUIDELINES:
+- Provide EXACTLY 4 unique, meaningful choices (never 3, never 5)
+- Each choice should represent a different course of action
+- Choices should be specific and actionable
+- Avoid repetitive or similar choices
+- If you can only think of 3 choices, add a 4th generic choice like "Continue exploring"
+
+MEMORY GUIDELINES:
+- Only create memories for SALIENT STORY POINTS that matter for narrative continuity
+- Focus on: plot developments, character revelations, important discoveries, relationship changes, world-building details
+- Examples of good memories: "The dragon revealed its true name", "Found the ancient map", "The village elder trusts us now", "The castle has a secret passage", "The merchant mentioned a prophecy"
+- Examples of bad memories: "Walked down the hallway", "Opened a door", "Saw some trees", "The room was dusty", "It was dark"
+- Memories should help the story remember what's important for future plot development, not every detail
+
+EXAMPLES OF COMPLETE RESPONSES:
+
+User: "I attack the dragon"
+{
+  "story": "With a fierce battle cry, you charge toward the massive dragon, your sword gleaming in the firelight. The beast rears back, its scales glinting like polished obsidian, and prepares to meet your assault with claws and flame.",
+  "image_prompt": "A warrior in mid-swing, sword raised high, charging toward a massive dragon with scales glinting in firelight, action shot with dynamic movement, dramatic lighting",
+  "choices": ["Continue the attack with full force", "Attempt to dodge and find a weak spot", "Call for backup from allies", "Try to negotiate or reason with the dragon"],
+  "ambience_prompt": "Epic battle music with clashing steel, dragon roars, and crackling fire",
+  "new_memories": ["The dragon's scales are incredibly tough", "The beast seems to respect courage in battle"]
+}
+
+User: "I search the room"
+{
+  "story": "You carefully examine the dimly lit chamber, your eyes scanning every corner and shadow. The flickering torchlight reveals ancient stone walls covered in mysterious runes, and scattered across the floor are various objects that might hold secrets or value.",
+  "image_prompt": "A character crouching down, hands searching through scattered objects, torchlight illuminating dusty corners, focused investigative action, detailed environment",
+  "choices": ["Examine the runes on the walls", "Search through the scattered objects", "Check for hidden doors or passages", "Investigate the source of the torchlight"],
+  "ambience_prompt": "Eerie ambient sounds with distant echoes, crackling torch, and the sound of objects being moved",
+  "new_memories": ["Ancient runes cover the walls", "The chamber appears to be a forgotten temple"]
+}
+
+🚨 FINAL REMINDER: Return ONLY a complete JSON object with ALL required fields. The user's command drives the story forward.`;
 
 // Context management settings
 const CONTEXT_WARNING_THRESHOLD = 0.8; // 80% of context limit
@@ -562,10 +623,35 @@ export async function executeLLMCall(retries: number = 3): Promise<void> {
             logWarn('Game', 'Repetition detected - using enhanced system prompt to break the loop');
         }
         
-        const response = await callLocalLLMWithRetry(currentSystemPrompt, gameState.messageHistory, jsonFields, retries);
+        let response = await callLocalLLMWithRetry(currentSystemPrompt, gameState.messageHistory, jsonFields, retries);
         logInfo('Game', 'Received LLM response', response);
         
+        // Fallback mechanism for incomplete responses
         if (response && response.story) {
+            // Ensure all required fields are present
+            if (!response.image_prompt) {
+                logWarn('Game', 'Missing image_prompt in response, generating fallback');
+                response.image_prompt = `A scene showing: ${response.story.substring(0, 100)}...`;
+            }
+            
+            if (!response.choices || !Array.isArray(response.choices) || response.choices.length !== 4) {
+                logWarn('Game', 'Invalid or missing choices in response, generating fallback choices');
+                response.choices = [
+                    "Continue exploring",
+                    "Investigate further", 
+                    "Take action",
+                    "Proceed carefully"
+                ];
+            }
+            
+            if (!response.ambience_prompt) {
+                logWarn('Game', 'Missing ambience_prompt in response, generating fallback');
+                response.ambience_prompt = "Ambient background sounds appropriate for the scene";
+            }
+            
+            if (!response.new_memories) {
+                response.new_memories = [];
+            }
             // Add response to message history
             gameState.messageHistory.push({ 
                 role: 'assistant', 
@@ -583,11 +669,11 @@ export async function executeLLMCall(retries: number = 3): Promise<void> {
 
             gameState.storyLog.push(storyEntry);
 
-            // Add new memories (initialize as empty array if missing)
+            // Add new salient story points (initialize as empty array if missing)
             const newMemories = response.new_memories || [];
             if (newMemories.length > 0) {
                 gameState.memories.push(...newMemories);
-                // Keep only last 10 memories
+                // Keep only last 10 salient story points
                 gameState.memories = gameState.memories.slice(-10);
             }
 
@@ -673,6 +759,110 @@ export async function executeLLMCall(retries: number = 3): Promise<void> {
         
     } catch (error) {
         console.error(`❌ executeLLMCall: Ollama LLM call failed after ${retries} retries:`, error);
+        
+        // Try fallback prompt if this was a validation error
+        if (error instanceof Error && error.message.includes('Missing required fields')) {
+            logWarn('Game', 'Attempting fallback with simplified prompt...');
+            try {
+                const fallbackResponse = await callLocalLLMWithRetry(fallbackPrompt, gameState.messageHistory, jsonFields, 1);
+                if (fallbackResponse && fallbackResponse.story) {
+                    logInfo('Game', 'Fallback prompt succeeded, continuing with game');
+                    
+                    // Use the fallback response
+                    let response = fallbackResponse;
+                    
+                    // Apply the same fallback mechanism
+                    if (!response.image_prompt) {
+                        response.image_prompt = `A scene showing: ${response.story.substring(0, 100)}...`;
+                    }
+                    
+                    if (!response.choices || !Array.isArray(response.choices) || response.choices.length !== 4) {
+                        response.choices = [
+                            "Continue exploring",
+                            "Investigate further", 
+                            "Take action",
+                            "Proceed carefully"
+                        ];
+                    }
+                    
+                    if (!response.ambience_prompt) {
+                        response.ambience_prompt = "Ambient background sounds appropriate for the scene";
+                    }
+                    
+                    if (!response.new_memories) {
+                        response.new_memories = [];
+                    }
+                    
+                    // Continue with the fallback response
+                    // Add response to message history
+                    gameState.messageHistory.push({ 
+                        role: 'assistant', 
+                        content: JSON.stringify(response) 
+                    });
+
+                    // Create story entry with UUID
+                    const storyEntry: StoryEntry = {
+                        id: generateUUID(),
+                        ...response,
+                        timestamp: Date.now()
+                    };
+
+                    gameState.storyLog.push(storyEntry);
+
+                    // Add new salient story points
+                    const newMemories = response.new_memories || [];
+                    if (newMemories.length > 0) {
+                        gameState.memories.push(...newMemories);
+                        gameState.memories = gameState.memories.slice(-10);
+                    }
+
+                    // Save story step to database
+                    if (gameState.sessionId && gameState.actionLog.length > 0) {
+                        try {
+                            const config = await loadConfig();
+                            if (config.database.saveStorySteps) {
+                                const lastAction = gameState.actionLog[gameState.actionLog.length - 1];
+                                const stepNumber = gameState.storyLog.length;
+                                
+                                await saveStoryStep(
+                                    gameState.sessionId,
+                                    stepNumber,
+                                    storyEntry.id,
+                                    lastAction.choice,
+                                    lastAction.outcome || 'Unknown',
+                                    response.story,
+                                    response.image_prompt,
+                                    response.choices,
+                                    response.ambience_prompt,
+                                    newMemories,
+                                    storyEntry.timestamp,
+                                    storyEntry.imageData
+                                );
+                            }
+                        } catch (error) {
+                            logError('Game', 'Failed to save story step to database', error);
+                        }
+                    }
+
+                    // Show story immediately
+                    gameState.currentState = 'PLAYING';
+                    
+                    // Notify UI to update with story content
+                    if (typeof window !== 'undefined' && window.dispatchEvent) {
+                        window.dispatchEvent(new CustomEvent('gameStateChanged', { detail: gameState }));
+                    }
+
+                    // Generate image asynchronously
+                    if (response.image_prompt) {
+                        generateImageAsync(response.image_prompt, storyEntry);
+                    }
+                    
+                    return; // Success with fallback
+                }
+            } catch (fallbackError) {
+                logError('Game', 'Fallback prompt also failed', fallbackError);
+            }
+        }
         
         const errorClassification = classifyOllamaError(error instanceof Error ? error : new Error('Unknown error'));
         logError('Game', 'Error classification', errorClassification);
@@ -1019,7 +1209,7 @@ export function resetGame(): void {
 }
 
 /**
- * Get memories for LLM context
+ * Get salient story points for LLM context
  */
 export async function getMemoriesContext(): Promise<string> {
     const config = await loadConfig();
@@ -1038,10 +1228,10 @@ export async function getMemoriesContext(): Promise<string> {
     const memoriesToInclude = gameState.memories.slice(-maxMemories);
     
     // Add importance indicator based on config
-    const importancePrefix = config.memories.memoryImportance === 'high' ? 'IMPORTANT ' : 
-                           config.memories.memoryImportance === 'medium' ? '' : 'Note: ';
+    const importancePrefix = config.memories.memoryImportance === 'high' ? 'IMPORTANT STORY POINTS: ' : 
+                           config.memories.memoryImportance === 'medium' ? 'Key Story Points: ' : 'Story Context: ';
     
-    return `[${importancePrefix}Memories: ${memoriesToInclude.join(', ')}]`;
+    return `[${importancePrefix}${memoriesToInclude.join(', ')}]`;
 }
 
 /**
@@ -1072,16 +1262,16 @@ export async function getStorySummaryContext(): Promise<string> {
 }
 
 /**
- * Add memory manually
+ * Add salient story point manually
  */
 export function addMemory(memory: string): void {
     gameState.memories.push(memory);
-    // Keep only last 10 memories
+    // Keep only last 10 salient story points
     gameState.memories = gameState.memories.slice(-10);
 }
 
 /**
- * Clear all memories
+ * Clear all salient story points
  */
 export function clearMemories(): void {
     gameState.memories = [];
@@ -1128,6 +1318,122 @@ export function exportSessionData(): string {
         version: '1.0.9'
     };
     return JSON.stringify(exportData, null, 2);
+}
+
+/**
+ * Auto-summarize steps and continue from summary
+ */
+export async function autoSummarizeSteps(): Promise<{ success: boolean; error?: string }> {
+    try {
+        if (gameState.currentState !== 'PLAYING') {
+            return { success: false, error: 'Game must be in playing state to summarize' };
+        }
+
+        if (gameState.storyLog.length < 2) {
+            return { success: false, error: 'Need at least 2 story steps to summarize' };
+        }
+
+        logInfo('Game', 'Starting auto-summarize steps process...');
+
+        // Create a comprehensive summary of all current steps
+        const summary = await createStorySummary();
+        
+        if (!summary) {
+            return { success: false, error: 'Failed to create story summary' };
+        }
+
+        // Save the current story steps to database before clearing
+        if (gameState.sessionId) {
+            try {
+                // Save all current steps to database
+                for (let i = 0; i < gameState.storyLog.length; i++) {
+                    const step = gameState.storyLog[i];
+                    const action = gameState.actionLog[i] || { choice: 'Unknown', outcome: 'Unknown' };
+                    
+                    await saveStoryStep(
+                        gameState.sessionId!,
+                        i + 1,
+                        step.id,
+                        action.choice,
+                        action.outcome || 'Unknown',
+                        step.story,
+                        step.image_prompt,
+                        step.choices,
+                        step.ambience_prompt,
+                        step.new_memories || [],
+                        step.timestamp,
+                        step.imageData
+                    );
+                }
+                logInfo('Game', `Saved ${gameState.storyLog.length} story steps to database before summarization`);
+            } catch (error) {
+                logError('Game', 'Failed to save story steps to database during summarization', error);
+                // Continue anyway - the steps are still in memory
+            }
+        }
+
+        // Create a new story entry with the summary as "STEP 1: Summary"
+        const summaryEntry: StoryEntry = {
+            id: generateUUID(),
+            story: `STEP 1: Summary\n\n${summary}\n\nThe adventure continues from this summarized state.`,
+            image_prompt: 'A mystical scene representing the summarized journey so far, with elements from the story visible in the background',
+            choices: [
+                "Continue the adventure",
+                "Explore new possibilities", 
+                "Investigate further",
+                "Take a different approach"
+            ],
+            ambience_prompt: 'Mysterious and contemplative atmosphere',
+            timestamp: Date.now()
+        };
+
+        // Clear the old story log and replace with the summary entry
+        gameState.storyLog = [summaryEntry];
+        
+        // Clear action log since we're starting fresh from summary
+        gameState.actionLog = [];
+        
+        // Clear message history but keep the summary as context
+        gameState.messageHistory = [
+            {
+                role: 'system',
+                content: `Story Summary: ${summary}\n\nContinue the adventure from this summarized state.`
+            }
+        ];
+
+        // Update story summary in database
+        if (gameState.sessionId) {
+            try {
+                await saveStorySummary(
+                    gameState.sessionId,
+                    summary,
+                    1, // Now we have 1 step (the summary)
+                    summaryEntry.id
+                );
+                logInfo('Game', 'Updated story summary in database after auto-summarization');
+            } catch (error) {
+                logError('Game', 'Failed to update story summary in database', error);
+            }
+        }
+
+        // Set game state to playing
+        gameState.currentState = 'PLAYING';
+
+        // Notify UI of state change
+        if (typeof window !== 'undefined' && window.dispatchEvent) {
+            window.dispatchEvent(new CustomEvent('gameStateChanged', { detail: gameState }));
+        }
+
+        logInfo('Game', 'Auto-summarize steps completed successfully');
+        return { success: true };
+
+    } catch (error) {
+        logError('Game', 'Auto-summarize steps failed', error);
+        return { 
+            success: false, 
+            error: `Auto-summarize failed: ${error instanceof Error ? error.message : 'Unknown error'}` 
+        };
+    }
 }
 
 /**
