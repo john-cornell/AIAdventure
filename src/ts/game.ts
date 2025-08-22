@@ -50,7 +50,7 @@ Respond with ONLY a JSON object containing:
   "new_memories": []
 }
 
-CRITICAL: Show the user's action happening in the story. NO OTHER TEXT. JUST THE JSON.`;
+IMPORTANT: Provide at least 2 choices (prefer 4). Show the user's action happening in the story. NO OTHER TEXT. JUST THE JSON.`;
 
 // System prompt for the game
 const systemPrompt = `You are an expert storyteller creating an interactive adventure game. 
@@ -68,11 +68,11 @@ REQUIRED JSON RESPONSE FORMAT:
 
 🚨 VALIDATION RULES:
 - You MUST include ALL 4 required fields: story, image_prompt, choices, ambience_prompt
-- choices MUST be an array with EXACTLY 4 unique choices (no more, no less)
+- choices MUST be an array with AT LEAST 2 choices (strongly prefer 4 choices)
 - new_memories is optional - only include if there are SALIENT STORY POINTS worth remembering
 - Return ONLY the JSON object, no other text
 - NO markdown formatting, NO code blocks, NO explanations
-- CRITICAL: Always provide exactly 4 choices, never 3 or 5
+- STRONGLY PREFERRED: Always provide exactly 4 choices for best player experience
 
 GAME INSTRUCTIONS:
 🚨 CRITICAL: The user's command/action is the PRIMARY driver of what happens next
@@ -104,11 +104,12 @@ IMAGE PROMPT GUIDELINES:
 - Make the image feel like a snapshot of the action in progress
 
 CHOICE GUIDELINES:
-- Provide EXACTLY 4 unique, meaningful choices (never 3, never 5)
+- STRONGLY PREFERRED: Provide exactly 4 unique, meaningful choices for the best experience
+- MINIMUM REQUIRED: At least 2 choices must be provided
 - Each choice should represent a different course of action
 - Choices should be specific and actionable
 - Avoid repetitive or similar choices
-- If you can only think of 3 choices, add a 4th generic choice like "Continue exploring"
+- If you can only think of 2-3 choices, that's acceptable, but 4 is strongly preferred
 
 MEMORY GUIDELINES:
 - Only create memories for SALIENT STORY POINTS that matter for narrative continuity
@@ -141,7 +142,7 @@ User: "I search the room"
 - Return ONLY a complete JSON object with ALL required fields
 - The user's command drives the story forward
 - ALWAYS show the user's action happening in the story
-- Provide EXACTLY 4 choices that respond to the user's action
+- STRONGLY PREFERRED: Provide 4 choices, but minimum 2 choices required
 - Make the story respond directly to what the user wants to do`;
 
 // Context management settings
