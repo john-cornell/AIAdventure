@@ -152,26 +152,32 @@ Received: ${JSON.stringify(parsedResponse)}`;
             throw new Error(errorMessage);
         }
 
-        // Validate choices array (minimum 2, prefer 4, accept up to 6)
-        if (parsedResponse.choices && Array.isArray(parsedResponse.choices)) {
-            if (parsedResponse.choices.length < 2) {
-                console.error('❌ callLocalLLM: Choices array has fewer than 2 elements (minimum required)');
-                console.error('❌ callLocalLLM: Choices received:', parsedResponse.choices);
-                throw new Error(`Invalid choices array. Expected at least 2 choices, got: ${parsedResponse.choices.length}`);
-            } else if (parsedResponse.choices.length < 4) {
-                console.warn(`⚠️ callLocalLLM: Choices array has ${parsedResponse.choices.length} elements (fewer than preferred 4)`);
-                console.log('📝 callLocalLLM: Choices received:', parsedResponse.choices);
-                // Accept as is - don't automatically add choices, let LLM decide
-            } else if (parsedResponse.choices.length > 6) {
-                console.warn('⚠️ callLocalLLM: Choices array has more than 6 elements, truncating to first 6');
-                parsedResponse.choices = parsedResponse.choices.slice(0, 6);
+        // Validate choices array only if it's expected in the response
+        const expectsChoices = jsonFields.some(field => field.name === 'choices');
+        if (expectsChoices) {
+            if (parsedResponse.choices && Array.isArray(parsedResponse.choices)) {
+                if (parsedResponse.choices.length < 2) {
+                    console.error('❌ callLocalLLM: Choices array has fewer than 2 elements (minimum required)');
+                    console.error('❌ callLocalLLM: Choices received:', parsedResponse.choices);
+                    throw new Error(`Invalid choices array. Expected at least 2 choices, got: ${parsedResponse.choices.length}`);
+                } else if (parsedResponse.choices.length < 4) {
+                    console.warn(`⚠️ callLocalLLM: Choices array has ${parsedResponse.choices.length} elements (fewer than preferred 4)`);
+                    console.log('📝 callLocalLLM: Choices received:', parsedResponse.choices);
+                    // Accept as is - don't automatically add choices, let LLM decide
+                } else if (parsedResponse.choices.length > 6) {
+                    console.warn('⚠️ callLocalLLM: Choices array has more than 6 elements, truncating to first 6');
+                    parsedResponse.choices = parsedResponse.choices.slice(0, 6);
+                } else {
+                    console.log(`✅ callLocalLLM: Choices array has ${parsedResponse.choices.length} elements (acceptable)`);
+                }
             } else {
-                console.log(`✅ callLocalLLM: Choices array has ${parsedResponse.choices.length} elements (acceptable)`);
+                console.error('❌ callLocalLLM: Invalid choices array. Expected array with at least 2 elements.');
+                console.error('❌ callLocalLLM: Choices received:', parsedResponse.choices);
+                throw new Error(`Invalid choices array. Expected array with at least 2 elements, got: ${JSON.stringify(parsedResponse.choices)}`);
             }
         } else {
-            console.error('❌ callLocalLLM: Invalid choices array. Expected array with at least 2 elements.');
-            console.error('❌ callLocalLLM: Choices received:', parsedResponse.choices);
-            throw new Error(`Invalid choices array. Expected array with at least 2 elements, got: ${JSON.stringify(parsedResponse.choices)}`);
+            // If choices is not expected, don't validate it
+            console.log('📝 callLocalLLM: Choices validation skipped (not expected in this response)');
         }
 
         console.log('✅ callLocalLLM: All validation passed, returning response');
