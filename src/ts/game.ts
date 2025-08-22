@@ -39,16 +39,18 @@ const jsonFields = [
 ];
 
 // Simplified fallback prompt for when the main prompt fails
-const fallbackPrompt = `You are a storyteller. Respond with ONLY a JSON object containing:
+const fallbackPrompt = `You are a storyteller. The user's command drives the story.
+
+Respond with ONLY a JSON object containing:
 {
-  "story": "A brief description of what happens next",
-  "image_prompt": "A simple visual description",
+  "story": "Show the user's action happening and what happens next",
+  "image_prompt": "A visual description of the user's action",
   "choices": ["Choice 1", "Choice 2", "Choice 3", "Choice 4"],
   "ambience_prompt": "Background sounds",
   "new_memories": []
 }
 
-NO OTHER TEXT. JUST THE JSON.`;
+CRITICAL: Show the user's action happening in the story. NO OTHER TEXT. JUST THE JSON.`;
 
 // System prompt for the game
 const systemPrompt = `You are an expert storyteller creating an interactive adventure game. 
@@ -73,6 +75,10 @@ REQUIRED JSON RESPONSE FORMAT:
 - CRITICAL: Always provide exactly 4 choices, never 3 or 5
 
 GAME INSTRUCTIONS:
+🚨 CRITICAL: The user's command/action is the PRIMARY driver of what happens next
+🚨 CRITICAL: ALWAYS respond directly to what the user wants to do
+🚨 CRITICAL: The story should show the user's action happening and its immediate consequences
+
 1. The user's command/action is the PRIMARY driver of what happens next
 2. ALWAYS respond directly to what the user wants to do
 3. The user's action will sometimes be prefixed with an [Outcome: ...]. 
@@ -85,6 +91,7 @@ GAME INSTRUCTIONS:
 4. Use the provided context (summary, recent steps, memories) to inform your response, but the user's command takes priority
 5. Keep the story engaging, descriptive, and responsive to player choices
 6. The story should be immersive and allow for meaningful player agency
+7. ALWAYS show the user's action happening in the story - don't just describe the scene
 
 IMAGE PROMPT GUIDELINES:
 - The image_prompt MUST capture the SPECIFIC ACTION the user commanded
@@ -130,7 +137,12 @@ User: "I search the room"
   "new_memories": ["Ancient runes cover the walls", "The chamber appears to be a forgotten temple"]
 }
 
-🚨 FINAL REMINDER: Return ONLY a complete JSON object with ALL required fields. The user's command drives the story forward.`;
+🚨 FINAL REMINDER: 
+- Return ONLY a complete JSON object with ALL required fields
+- The user's command drives the story forward
+- ALWAYS show the user's action happening in the story
+- Provide EXACTLY 4 choices that respond to the user's action
+- Make the story respond directly to what the user wants to do`;
 
 // Context management settings
 const CONTEXT_WARNING_THRESHOLD = 0.8; // 80% of context limit
@@ -372,7 +384,7 @@ RESPONSE FORMAT: Return ONLY a JSON object with a "story" field containing the s
         logDebug('Game', 'Calling LLM for story summary with prompt length:', summaryPrompt.length);
         
         const response = await callLocalLLMWithRetry(
-            'You are an expert story analyst who creates detailed, comprehensive summaries focusing on the most important narrative elements, character development, and plot progression. Always return a proper summary, never just list the steps.',
+            'You are an expert story analyst. Create detailed summaries focusing on narrative elements, character development, and plot progression. Return ONLY a JSON object with a "story" field containing the summary.',
             [{ role: 'user', content: summaryPrompt }],
             [{ name: 'story', type: 'string' }],
             2 // Increased retries for summary
