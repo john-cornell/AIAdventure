@@ -33,8 +33,7 @@ let currentSession: GameSession | null = null;
 const jsonFields = [
     { name: 'story', type: 'string' },
     { name: 'image_prompt', type: 'string' },
-    { name: 'choices', type: 'array' },
-    { name: 'ambience_prompt', type: 'string' }
+    { name: 'choices', type: 'array' }
     // new_memories is optional - not every story beat needs to create memories
 ];
 
@@ -46,7 +45,6 @@ Respond with ONLY a JSON object containing:
   "story": "Show the user's action happening and what happens next",
   "image_prompt": "A visual description of the user's action",
   "choices": ["Choice 1", "Choice 2", "Choice 3", "Choice 4"],
-  "ambience_prompt": "Background sounds",
   "new_memories": []
 }
 
@@ -62,12 +60,11 @@ REQUIRED JSON RESPONSE FORMAT:
   "story": "A vivid, engaging description of the current scene and what happens next",
   "image_prompt": "A detailed visual description for generating an image of this scene", 
   "choices": ["Choice 1", "Choice 2", "Choice 3", "Choice 4"],
-  "ambience_prompt": "A brief description of the ambient sounds/music for this scene",
   "new_memories": ["Important memory 1", "Important memory 2"]
 }
 
 🚨 VALIDATION RULES:
-- You MUST include ALL 4 required fields: story, image_prompt, choices, ambience_prompt
+- You MUST include ALL 3 required fields: story, image_prompt, choices
 - choices MUST be an array with AT LEAST 2 choices (strongly prefer 4 choices)
 - new_memories is optional - only include if there are SALIENT STORY POINTS worth remembering
 - Return ONLY the JSON object, no other text
@@ -125,7 +122,7 @@ User: "I attack the dragon"
   "story": "With a fierce battle cry, you charge toward the massive dragon, your sword gleaming in the firelight. The beast rears back, its scales glinting like polished obsidian, and prepares to meet your assault with claws and flame.",
   "image_prompt": "A warrior in mid-swing, sword raised high, charging toward a massive dragon with scales glinting in firelight, action shot with dynamic movement, dramatic lighting",
   "choices": ["Continue the attack with full force", "Attempt to dodge and find a weak spot", "Call for backup from allies", "Try to negotiate or reason with the dragon"],
-  "ambience_prompt": "Epic battle music with clashing steel, dragon roars, and crackling fire",
+
   "new_memories": ["The dragon's scales are incredibly tough", "The beast seems to respect courage in battle"]
 }
 
@@ -134,7 +131,6 @@ User: "I search the room"
   "story": "You carefully examine the dimly lit chamber, your eyes scanning every corner and shadow. The flickering torchlight reveals ancient stone walls covered in mysterious runes, and scattered across the floor are various objects that might hold secrets or value.",
   "image_prompt": "A character crouching down, hands searching through scattered objects, torchlight illuminating dusty corners, focused investigative action, detailed environment",
   "choices": ["Examine the runes on the walls", "Search through the scattered objects", "Check for hidden doors or passages", "Investigate the source of the torchlight"],
-  "ambience_prompt": "Eerie ambient sounds with distant echoes, crackling torch, and the sound of objects being moved",
   "new_memories": ["Ancient runes cover the walls", "The chamber appears to be a forgotten temple"]
 }
 
@@ -657,10 +653,7 @@ export async function executeLLMCall(retries: number = 3): Promise<void> {
                 ];
             }
             
-            if (!response.ambience_prompt) {
-                logWarn('Game', 'Missing ambience_prompt in response, generating fallback');
-                response.ambience_prompt = "Ambient background sounds appropriate for the scene";
-            }
+
             
             if (!response.new_memories) {
                 response.new_memories = [];
@@ -707,7 +700,6 @@ export async function executeLLMCall(retries: number = 3): Promise<void> {
                             response.story,
                             response.image_prompt,
                             response.choices,
-                            response.ambience_prompt,
                             newMemories,
                             storyEntry.timestamp,
                             storyEntry.imageData
@@ -798,9 +790,7 @@ export async function executeLLMCall(retries: number = 3): Promise<void> {
                         ];
                     }
                     
-                    if (!response.ambience_prompt) {
-                        response.ambience_prompt = "Ambient background sounds appropriate for the scene";
-                    }
+                    
                     
                     if (!response.new_memories) {
                         response.new_memories = [];
@@ -846,7 +836,6 @@ export async function executeLLMCall(retries: number = 3): Promise<void> {
                                     response.story,
                                     response.image_prompt,
                                     response.choices,
-                                    response.ambience_prompt,
                                     newMemories,
                                     storyEntry.timestamp,
                                     storyEntry.imageData
@@ -1137,7 +1126,7 @@ export function exportGameState(): string {
     const exportData = {
         gameState: gameState,
         exportDate: new Date().toISOString(),
-        version: '1.0.9'
+        version: '1.0.10'
     };
     return JSON.stringify(exportData, null, 2);
 }
@@ -1328,7 +1317,7 @@ export function exportSessionData(): string {
         session: currentSession,
         gameState: gameState,
         exportDate: new Date().toISOString(),
-        version: '1.0.9'
+        version: '1.0.10'
     };
     return JSON.stringify(exportData, null, 2);
 }
@@ -1372,7 +1361,7 @@ export async function autoSummarizeSteps(): Promise<{ success: boolean; error?: 
                         step.story,
                         step.image_prompt,
                         step.choices,
-                        step.ambience_prompt,
+
                         step.new_memories || [],
                         step.timestamp,
                         step.imageData
@@ -1396,7 +1385,7 @@ export async function autoSummarizeSteps(): Promise<{ success: boolean; error?: 
                 "Investigate further",
                 "Take a different approach"
             ],
-            ambience_prompt: 'Mysterious and contemplative atmosphere',
+
             timestamp: Date.now()
         };
 

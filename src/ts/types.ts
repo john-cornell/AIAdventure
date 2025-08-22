@@ -3,7 +3,6 @@ export interface LLMResponse {
     story: string;
     image_prompt: string;
     choices: string[];
-    ambience_prompt: string;
     new_memories?: string[]; // Optional - not every story beat needs to create memories
     summary?: string; // Optional field for story summaries
 }
@@ -43,7 +42,6 @@ export interface StoryEntry {
     story: string;
     image_prompt: string;
     choices: string[];
-    ambience_prompt: string;
     new_memories?: string[]; // Optional - not every story beat needs to create memories
     timestamp: number;
     imageData?: string; // Base64 encoded image data

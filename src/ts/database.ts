@@ -447,7 +447,6 @@ export async function saveStoryStep(
     storyText: string,
     imagePrompt: string,
     choices: string[],
-    ambiencePrompt: string,
     newMemories: string[],
     timestamp: number,
     imageData?: string
@@ -463,7 +462,7 @@ export async function saveStoryStep(
             story_text: storyText,
             image_prompt: imagePrompt,
             choices,
-            ambience_prompt: ambiencePrompt,
+            ambience_prompt: '', // Empty string for backward compatibility
             new_memories: newMemories,
             timestamp,
             image_data: imageData

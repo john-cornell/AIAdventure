@@ -1,6 +1,6 @@
 {
   "name": "ai-adventure",
-  "version": "1.0.9",
+  "version": "1.0.10",
   "description": "Local AI Adventure Game with Ollama and Stable Diffusion",
   "main": "dist/index.html",
   "scripts": {

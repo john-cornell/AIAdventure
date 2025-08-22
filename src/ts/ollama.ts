@@ -37,6 +37,12 @@ export async function callLocalLLM(
     // Convert messages to a single prompt string with stronger formatting instructions
     const prompt = messages.map(msg => `${msg.role === 'system' ? 'System: ' : 'User: '}${msg.content}`).join('\n\n') + '\n\nAssistant: RESPOND WITH ONLY A COMPLETE JSON OBJECT. NO OTHER TEXT. NO EXPLANATIONS. NO MARKDOWN. JUST THE JSON.';
     console.log('📝 callLocalLLM: Prompt length:', prompt.length, 'characters');
+    
+    // Log the full prompt for debugging (verbose logging)
+    console.log('📝 callLocalLLM: Full prompt being sent to LLM:');
+    console.log('='.repeat(80));
+    console.log(prompt);
+    console.log('='.repeat(80));
 
     try {
         console.log('📡 callLocalLLM: Making fetch request to:', `${ollamaUrl}/api/generate`);
@@ -146,7 +152,7 @@ export async function callLocalLLM(
             // Provide more helpful error message
             const missingFieldNames = missingFields.map(f => f.name).join(', ');
             const errorMessage = `LLM response incomplete. Missing required fields: ${missingFieldNames}. 
-Expected format: {"story": "...", "image_prompt": "...", "choices": ["...", "...", "...", "..."], "ambience_prompt": "..."}
+Expected format: {"story": "...", "image_prompt": "...", "choices": ["...", "...", "...", "..."]}
 Received: ${JSON.stringify(parsedResponse)}`;
             
             throw new Error(errorMessage);

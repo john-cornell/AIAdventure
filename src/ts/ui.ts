@@ -3415,7 +3415,7 @@ async function loadGameFromDatabase(sessionId: string): Promise<void> {
                 story: step.story_text,
                 image_prompt: step.image_prompt,
                 choices: step.choices,
-                ambience_prompt: step.ambience_prompt,
+    
                 timestamp: step.timestamp
             };
             storyLog.push(storyEntry);
