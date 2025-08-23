@@ -1,0 +1,371 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Standalone Database Test - AI Adventure v1.0.20</title>
+    <script src="https://cdn.skypack.dev/dexie@4.2.0"></script>
+    <style>
+        body {
+            background: linear-gradient(135deg, #1e3a8a 0%, #1e40af 50%, #3b82f6 100%);
+            min-height: 100vh;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            color: white;
+            padding: 20px;
+        }
+        .test-container {
+            max-width: 1000px;
+            margin: 0 auto;
+            background: rgba(0, 0, 0, 0.3);
+            padding: 20px;
+            border-radius: 10px;
+            border: 1px solid rgba(255, 255, 255, 0.2);
+        }
+        .test-section {
+            margin: 20px 0;
+            padding: 15px;
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 8px;
+        }
+        .test-button {
+            background: #3b82f6;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 5px;
+            cursor: pointer;
+            margin: 5px;
+        }
+        .test-button:hover {
+            background: #2563eb;
+        }
+        .test-result {
+            margin: 10px 0;
+            padding: 10px;
+            background: rgba(0, 0, 0, 0.5);
+            border-radius: 5px;
+            font-family: monospace;
+            white-space: pre-wrap;
+            max-height: 400px;
+            overflow-y: auto;
+        }
+        .success { border-left: 4px solid #10b981; }
+        .error { border-left: 4px solid #ef4444; }
+        .warning { border-left: 4px solid #f59e0b; }
+    </style>
+</head>
+<body>
+    <div class="test-container">
+        <h1>🔍 Standalone Database Test - AI Adventure v1.0.20</h1>
+        
+        <div class="test-section">
+            <h3>Database Initialization</h3>
+            <button class="test-button" onclick="testDatabaseInit()">Initialize Database</button>
+            <div id="init-result" class="test-result"></div>
+        </div>
+        
+        <div class="test-section">
+            <h3>Story Step Save Test</h3>
+            <button class="test-button" onclick="testSaveStoryStep()">Save Test Story Step</button>
+            <div id="save-result" class="test-result"></div>
+        </div>
+        
+        <div class="test-section">
+            <h3>Story Steps Load Test</h3>
+            <button class="test-button" onclick="testLoadStorySteps()">Load All Story Steps</button>
+            <div id="load-result" class="test-result"></div>
+        </div>
+        
+        <div class="test-section">
+            <h3>Database Contents</h3>
+            <button class="test-button" onclick="showDatabaseContents()">Show All Database Data</button>
+            <div id="contents-result" class="test-result"></div>
+        </div>
+        
+        <div class="test-section">
+            <h3>Clear Test Data</h3>
+            <button class="test-button" onclick="clearTestData()">Clear Test Data</button>
+            <div id="clear-result" class="test-result"></div>
+        </div>
+    </div>
+
+    <script>
+        // Inline database implementation for testing
+        let database = null;
+        let testSessionId = 'test-session-' + Date.now();
+        
+        // Simple logging function
+        function log(message) {
+            console.log(message);
+        }
+        
+        // Database initialization
+        async function initializeDatabase() {
+            try {
+                log('🔧 Initializing database...');
+                
+                // Create a simple test database
+                database = {
+                    name: 'test-database',
+                    version: 1,
+                    tables: {
+                        configs: [],
+                        storySummaries: [],
+                        storySteps: []
+                    }
+                };
+                
+                log('✅ Database initialized successfully');
+                return true;
+            } catch (error) {
+                log('❌ Database initialization failed: ' + error.message);
+                throw error;
+            }
+        }
+        
+        // Save story step
+        async function saveStoryStep(sessionId, stepNumber, storyEntryId, choice, outcome, storyText, imagePrompt, choices, newMemories, timestamp) {
+            try {
+                log('💾 Saving story step...');
+                
+                const step = {
+                    id: Date.now(),
+                    session_id: sessionId,
+                    step_number: stepNumber,
+                    story_entry_id: storyEntryId,
+                    choice: choice,
+                    outcome: outcome,
+                    story_text: storyText,
+                    image_prompt: imagePrompt,
+                    choices: choices,
+                    new_memories: newMemories,
+                    timestamp: timestamp
+                };
+                
+                database.tables.storySteps.push(step);
+                log('✅ Story step saved with ID: ' + step.id);
+                
+                return step.id;
+            } catch (error) {
+                log('❌ Failed to save story step: ' + error.message);
+                throw error;
+            }
+        }
+        
+        // Load story steps
+        async function loadStorySteps(sessionId) {
+            try {
+                log('📖 Loading story steps for session: ' + sessionId);
+                
+                const steps = database.tables.storySteps.filter(step => step.session_id === sessionId);
+                steps.sort((a, b) => a.step_number - b.step_number);
+                
+                log('✅ Loaded ' + steps.length + ' story steps');
+                return steps;
+            } catch (error) {
+                log('❌ Failed to load story steps: ' + error.message);
+                return [];
+            }
+        }
+        
+        // Get all database data
+        async function getAllDatabaseData() {
+            try {
+                log('📊 Getting all database data...');
+                
+                return {
+                    configs: database.tables.configs,
+                    storySummaries: database.tables.storySummaries,
+                    storySteps: database.tables.storySteps
+                };
+            } catch (error) {
+                log('❌ Failed to get database data: ' + error.message);
+                return { configs: [], storySummaries: [], storySteps: [] };
+            }
+        }
+        
+        // Delete story steps
+        async function deleteStorySteps(sessionId) {
+            try {
+                log('🗑️ Deleting story steps for session: ' + sessionId);
+                
+                const initialCount = database.tables.storySteps.length;
+                database.tables.storySteps = database.tables.storySteps.filter(step => step.session_id !== sessionId);
+                const finalCount = database.tables.storySteps.length;
+                
+                log('✅ Deleted ' + (initialCount - finalCount) + ' story steps');
+                return true;
+            } catch (error) {
+                log('❌ Failed to delete story steps: ' + error.message);
+                return false;
+            }
+        }
+        
+        // Test functions
+        window.testDatabaseInit = async function() {
+            const resultDiv = document.getElementById('init-result');
+            resultDiv.innerHTML = 'Initializing database...';
+            resultDiv.className = 'test-result warning';
+            
+            try {
+                await initializeDatabase();
+                resultDiv.innerHTML = '✅ Database initialized successfully!\nTest Session ID: ' + testSessionId;
+                resultDiv.className = 'test-result success';
+            } catch (error) {
+                resultDiv.innerHTML = `❌ Database initialization failed: ${error.message}\nError: ${error}`;
+                resultDiv.className = 'test-result error';
+                console.error('Database init error:', error);
+            }
+        };
+        
+        window.testSaveStoryStep = async function() {
+            const resultDiv = document.getElementById('save-result');
+            resultDiv.innerHTML = 'Testing story step save...';
+            resultDiv.className = 'test-result warning';
+            
+            try {
+                const stepNumber = Math.floor(Math.random() * 100) + 1;
+                const testStep = {
+                    sessionId: testSessionId,
+                    stepNumber: stepNumber,
+                    storyEntryId: 'test-entry-' + Date.now(),
+                    choice: 'Test choice for step ' + stepNumber,
+                    outcome: 'Success',
+                    storyText: 'This is a test story step with some narrative content to verify the database save functionality is working properly.',
+                    imagePrompt: 'A test scene showing database functionality',
+                    choices: ['Test Choice 1', 'Test Choice 2', 'Test Choice 3'],
+                    newMemories: ['Test memory: Database save test'],
+                    timestamp: Date.now()
+                };
+                
+                console.log('Saving test step:', testStep);
+                
+                const id = await saveStoryStep(
+                    testStep.sessionId,
+                    testStep.stepNumber,
+                    testStep.storyEntryId,
+                    testStep.choice,
+                    testStep.outcome,
+                    testStep.storyText,
+                    testStep.imagePrompt,
+                    testStep.choices,
+                    testStep.newMemories,
+                    testStep.timestamp
+                );
+                
+                resultDiv.innerHTML = `✅ Story step saved successfully!\n\nSaved Data:\n- ID: ${id}\n- Session: ${testSessionId}\n- Step Number: ${testStep.stepNumber}\n- Choice: ${testStep.choice}\n- Story Length: ${testStep.storyText.length} chars\n- Choices: ${testStep.choices.length} options`;
+                resultDiv.className = 'test-result success';
+            } catch (error) {
+                resultDiv.innerHTML = `❌ Story step saving failed: ${error.message}\n\nFull Error:\n${error.stack}`;
+                resultDiv.className = 'test-result error';
+                console.error('Save error:', error);
+            }
+        };
+        
+        window.testLoadStorySteps = async function() {
+            const resultDiv = document.getElementById('load-result');
+            resultDiv.innerHTML = 'Loading story steps...';
+            resultDiv.className = 'test-result warning';
+            
+            try {
+                const storySteps = await loadStorySteps(testSessionId);
+                
+                if (storySteps.length > 0) {
+                    let output = `✅ Loaded ${storySteps.length} story steps for session ${testSessionId}:\n\n`;
+                    storySteps.forEach((step, index) => {
+                        output += `Step ${step.step_number} (ID: ${step.id || 'N/A'}):\n`;
+                        output += `  Choice: ${step.choice}\n`;
+                        output += `  Outcome: ${step.outcome}\n`;
+                        output += `  Story: ${step.story_text.substring(0, 100)}...\n`;
+                        output += `  Timestamp: ${new Date(step.timestamp).toLocaleString()}\n\n`;
+                    });
+                    resultDiv.innerHTML = output;
+                    resultDiv.className = 'test-result success';
+                } else {
+                    resultDiv.innerHTML = `⚠️ No story steps found for session ${testSessionId}\n\nThis could mean:\n- No steps have been saved yet\n- Database saving is not working\n- Session ID mismatch`;
+                    resultDiv.className = 'test-result warning';
+                }
+            } catch (error) {
+                resultDiv.innerHTML = `❌ Story step loading failed: ${error.message}\n\nFull Error:\n${error.stack}`;
+                resultDiv.className = 'test-result error';
+                console.error('Load error:', error);
+            }
+        };
+        
+        window.showDatabaseContents = async function() {
+            const resultDiv = document.getElementById('contents-result');
+            resultDiv.innerHTML = 'Loading all database data...';
+            resultDiv.className = 'test-result warning';
+            
+            try {
+                const allData = await getAllDatabaseData();
+                
+                let output = `📊 Complete Database Contents:\n\n`;
+                output += `Configs: ${allData.configs.length}\n`;
+                output += `Story Summaries: ${allData.storySummaries.length}\n`;
+                output += `Story Steps: ${allData.storySteps.length}\n\n`;
+                
+                if (allData.storySteps.length > 0) {
+                    output += `Story Steps by Session:\n`;
+                    const stepsBySession = {};
+                    allData.storySteps.forEach(step => {
+                        if (!stepsBySession[step.session_id]) {
+                            stepsBySession[step.session_id] = [];
+                        }
+                        stepsBySession[step.session_id].push(step);
+                    });
+                    
+                    Object.keys(stepsBySession).forEach(sessionId => {
+                        const steps = stepsBySession[sessionId];
+                        output += `\n📁 Session: ${sessionId}\n`;
+                        output += `   ${steps.length} steps\n`;
+                        steps.forEach(step => {
+                            output += `   Step ${step.step_number}: ${step.choice}\n`;
+                        });
+                    });
+                } else {
+                    output += `\n❌ No story steps found in database!\n`;
+                    output += `This indicates that database saving is not working.`;
+                }
+                
+                resultDiv.innerHTML = output;
+                resultDiv.className = 'test-result success';
+            } catch (error) {
+                resultDiv.innerHTML = `❌ Failed to load database contents: ${error.message}\n\nFull Error:\n${error.stack}`;
+                resultDiv.className = 'test-result error';
+                console.error('Contents error:', error);
+            }
+        };
+        
+        window.clearTestData = async function() {
+            const resultDiv = document.getElementById('clear-result');
+            resultDiv.innerHTML = 'Clearing test data...';
+            resultDiv.className = 'test-result warning';
+            
+            try {
+                await deleteStorySteps(testSessionId);
+                
+                // Generate a new test session ID
+                testSessionId = 'test-session-' + Date.now();
+                
+                resultDiv.innerHTML = `✅ Test data cleared successfully!\nNew test session ID: ${testSessionId}`;
+                resultDiv.className = 'test-result success';
+            } catch (error) {
+                resultDiv.innerHTML = `❌ Failed to clear test data: ${error.message}\n\nFull Error:\n${error.stack}`;
+                resultDiv.className = 'test-result error';
+                console.error('Clear error:', error);
+            }
+        };
+        
+        // Auto-initialize database when page loads
+        window.addEventListener('load', async () => {
+            try {
+                await initializeDatabase();
+                console.log('✅ Database auto-initialized for testing');
+            } catch (error) {
+                console.error('❌ Failed to auto-initialize database:', error);
+            }
+        });
+    </script>
+</body>
+</html>

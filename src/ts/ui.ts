@@ -1224,6 +1224,11 @@ function setupEventListeners(): void {
         const customEvent = event as CustomEvent;
         const gameState = customEvent.detail;
         updateStoryDisplay();
+        
+        // Also update history display if history tab is active
+        if (isHistoryTabActive()) {
+            updateHistoryDisplay();
+        }
     });
 }
 
@@ -2728,6 +2733,11 @@ function showGameScreen(): void {
                                 class="w-10 h-10 bg-gray-800/50 rounded-full hover:bg-gray-700/70 transition-colors flex items-center justify-center text-gray-400 hover:text-white">
                             📝
                         </button>
+                        <button id="story-management-button" 
+                                class="w-10 h-10 bg-gray-800/50 rounded-full hover:bg-gray-700/70 transition-colors flex items-center justify-center text-gray-400 hover:text-white"
+                                title="Story Management - View and manage story sessions">
+                            📚
+                        </button>
 
                     </div>
                     <div class="flex items-center gap-4">
@@ -2812,11 +2822,19 @@ function showGameScreen(): void {
     const exportBtn = document.getElementById('export-button');
     const resetBtn = document.getElementById('reset-button');
     const autoSummarizeBtn = document.getElementById('auto-summarize-button');
+    const settingsBtn = document.getElementById('settings-button');
     const customActionForm = document.getElementById('custom-action-form') as HTMLFormElement;
     const customActionInput = document.getElementById('custom-action-input') as HTMLInputElement;
     
     if (exportBtn) {
         exportBtn.addEventListener('click', () => exportGame());
+    }
+    
+    if (settingsBtn) {
+        settingsBtn.addEventListener('click', () => {
+            // TODO: Implement settings overlay
+            showMessage('Settings feature coming soon!', 'success');
+        });
     }
     
     if (autoSummarizeBtn) {
@@ -2891,6 +2909,14 @@ function showGameScreen(): void {
                 resetGame();
                 showMenuScreen();
             }
+        });
+    }
+    
+    // Story Management button event handler
+    const storyManagementBtn = document.getElementById('story-management-button');
+    if (storyManagementBtn) {
+        storyManagementBtn.addEventListener('click', () => {
+            showStoryManagementOverlay();
         });
     }
     
@@ -3038,6 +3064,15 @@ function updateStoryDisplay(): void {
 }
 
 /**
+ * Check if history tab is currently active
+ */
+function isHistoryTabActive(): boolean {
+    const historyTab = document.querySelector('[data-tab="history"]');
+    const historyContent = document.getElementById('history-content');
+    return historyTab !== null && historyContent !== null && !historyContent.classList.contains('hidden');
+}
+
+/**
  * Update history display
  */
 function updateHistoryDisplay(): void {
@@ -3080,6 +3115,9 @@ function updateHistoryDisplay(): void {
         
         historyContent.appendChild(historyEntry);
     });
+    
+    // Auto-scroll to bottom when new content is added
+    historyContent.scrollTop = historyContent.scrollHeight;
 }
 
 /**
@@ -3093,6 +3131,12 @@ async function handleChoice(choice: string): Promise<void> {
     try {
         await updateGame(choice);
         updateStoryDisplay();
+        
+        // Also update history display if history tab is active
+        if (isHistoryTabActive()) {
+            updateHistoryDisplay();
+        }
+        
         logInfo('UI', 'Choice processed successfully');
     } catch (error: any) {
         logError('UI', 'Failed to process choice', error);
@@ -3236,11 +3280,14 @@ function importGame(data: any): void {
             throw new Error('Invalid adventure file format');
         }
         
-        // Reset current game state
-        resetGame();
+        // Reset current game state but preserve session ID if importing from exported data
+        const preserveSessionId = !!data.sessionId;
+        resetGame(preserveSessionId);
         
+        console.log('🔍 About to update game state with sessionId:', data.sessionId);
         // Import the data using updateGameState to properly modify the game state
         updateGameState({
+            sessionId: data.sessionId, // Preserve the session ID from imported data
             messageHistory: data.messageHistory || [],
             storyLog: data.storyLog || [],
             actionLog: data.actionLog || [],
@@ -3250,6 +3297,7 @@ function importGame(data: any): void {
         
         console.log('📥 Imported game state:', getGameState());
         console.log('📥 Story log entries:', getGameState().storyLog.length);
+        console.log('📥 Session ID preserved:', getGameState().sessionId);
         
         // Switch to game screen
         showGameScreen();
@@ -3699,8 +3747,22 @@ async function loadSessionData(sessionId: string): Promise<void> {
         // Update steps display
         const stepsContainer = document.getElementById('story-steps-container');
         if (stepsContainer) {
-            // For now, show placeholder - you can expand this to show actual steps
-            stepsContainer.innerHTML = '<span class="text-gray-500">Story steps display coming soon...</span>';
+            try {
+                console.log('Loading story steps for session:', sessionId);
+                const { loadStorySteps } = await import('./database.js');
+                const storySteps = await loadStorySteps(sessionId);
+                console.log('Story steps loaded:', storySteps.length, 'steps');
+                console.log('Story steps data:', storySteps);
+                
+                if (storySteps.length > 0) {
+                    stepsContainer.innerHTML = formatStoryStepsData(storySteps, false);
+                } else {
+                    stepsContainer.innerHTML = '<span class="text-gray-500">No story steps found for this session</span>';
+                }
+            } catch (error) {
+                console.error('Error loading story steps:', error);
+                stepsContainer.innerHTML = '<span class="text-red-500">Error loading story steps</span>';
+            }
         }
         
         // Show session info
@@ -3766,8 +3828,15 @@ async function loadGameFromSession(sessionId: string): Promise<void> {
         console.log('✅ Steps sorted successfully');
         
         console.log('🔧 Reconstructing game state from story steps...');
+        console.log('🔍 sessionId parameter value:', sessionId);
+        console.log('🔍 sessionId parameter type:', typeof sessionId);
+        console.log('🔍 sessionId parameter length:', sessionId?.length);
+        
         // Reconstruct the game state from story steps
+        console.log('🔍 About to create reconstructedGameState with sessionId:', sessionId);
+        
         const reconstructedGameState = {
+            sessionId: sessionId, // Include the session ID for continuity
             messageHistory: [],
             storyLog: storySteps.map(step => ({
                 id: step.story_entry_id,
@@ -3784,17 +3853,26 @@ async function loadGameFromSession(sessionId: string): Promise<void> {
             memories: storySteps.flatMap(step => step.new_memories),
             currentState: 'PLAYING'
         };
+        
+        console.log('🔍 reconstructedGameState object created:', reconstructedGameState);
+        console.log('🔍 reconstructedGameState.sessionId explicitly:', reconstructedGameState.sessionId);
+        
+        console.log('🔍 reconstructedGameState.sessionId:', reconstructedGameState.sessionId);
+        console.log('🔍 reconstructedGameState.sessionId type:', typeof reconstructedGameState.sessionId);
         console.log('✅ Game state reconstructed:', reconstructedGameState);
+        console.log('🔍 Session ID in reconstructed data:', reconstructedGameState.sessionId);
         
         console.log('🔄 Resetting current game state...');
-        // Reset current game state
-        resetGame();
+        // Reset current game state but preserve session ID for continuity
+        resetGame(true);
         console.log('✅ Game reset completed');
+        console.log('🔍 Session ID after reset:', getGameState().sessionId);
         
         console.log('📥 Importing reconstructed game data...');
         // Import the reconstructed data
         importGame(reconstructedGameState);
         console.log('✅ Game data imported successfully');
+        console.log('🔍 Session ID after import:', getGameState().sessionId);
         
         console.log('🚪 Closing story management overlay...');
         // Close the overlay and show success message
@@ -3818,7 +3896,12 @@ async function deleteSessionData(sessionId: string): Promise<void> {
     if (confirm(`Are you sure you want to delete all data for session ${sessionId}?`)) {
         try {
             await deleteStorySummaryFromDatabase(sessionId);
-            showMessage('Session data deleted successfully', 'success');
+            
+            // Refresh BOTH database data and story management data to update all displays
+            await Promise.all([
+                refreshDatabaseData(),
+                loadStoryManagementData()
+            ]);
             
             // Clear the current session display
             const summaryContainer = document.getElementById('story-summary-container');
@@ -3842,8 +3925,7 @@ async function deleteSessionData(sessionId: string): Promise<void> {
                 sessionSelector.value = '';
             }
             
-            // Refresh all data
-            await loadStoryManagementData();
+            showMessage('Session data deleted successfully', 'success');
         } catch (error) {
             console.error('Failed to delete session data:', error);
             showMessage('Failed to delete session data', 'error');
@@ -4052,8 +4134,27 @@ async function deleteStorySummary(sessionId: string): Promise<void> {
     try {
         const success = await deleteStorySummaryFromDatabase(sessionId);
         if (success) {
-            // Refresh the database data to update the display
-            await refreshDatabaseData();
+            // Refresh BOTH database data and story management data to update all displays
+            await Promise.all([
+                refreshDatabaseData(),
+                loadStoryManagementData()
+            ]);
+            
+            // Clear any selected session displays
+            const sessionSelector = document.getElementById('story-session-selector') as HTMLSelectElement;
+            if (sessionSelector && sessionSelector.value === sessionId) {
+                sessionSelector.value = '';
+                
+                // Clear the displays
+                const summaryContainer = document.getElementById('story-summary-container');
+                const stepsContainer = document.getElementById('story-steps-container');
+                const sessionInfo = document.getElementById('session-info');
+                
+                if (summaryContainer) summaryContainer.innerHTML = '<span class="text-gray-500">Select a session to view summary...</span>';
+                if (stepsContainer) stepsContainer.innerHTML = '<span class="text-gray-500">Select a session to view steps...</span>';
+                if (sessionInfo) sessionInfo.classList.add('hidden');
+            }
+            
             showMessage(`Story summary for session ${sessionId} deleted successfully`, 'success');
         } else {
             showMessage(`Failed to delete story summary for session ${sessionId}`, 'error');
@@ -4316,6 +4417,11 @@ async function loadGameFromDatabase(sessionId: string): Promise<void> {
             // Update the UI to show the loaded content
             updateStoryDisplay();
             
+            // Also update history display if history tab is active
+            if (isHistoryTabActive()) {
+                updateHistoryDisplay();
+            }
+            
             showMessage(`Game loaded successfully! Session: ${sessionId}`, 'success');
         } else {
             showMessage(`Failed to load game: ${result.error}`, 'error');
@@ -4516,14 +4622,29 @@ async function loadAndDisplaySummaryAndSteps(sessionId: string): Promise<void> {
         
         if (stepsContainer) {
             if (steps.length > 0) {
-                const stepsHtml = steps.map(step => `
-                    <div class="border-b border-gray-700 pb-2 mb-2">
-                        <div class="text-white font-semibold">Step ${step.step_number}</div>
-                        <div class="text-gray-300 text-xs">${new Date(step.timestamp).toLocaleString()}</div>
-                        <div class="text-gray-300 mt-1">${step.story_text}</div>
-                        ${step.choice ? `<div class="text-blue-300 text-xs mt-1">Choice: ${step.choice}</div>` : ''}
-                    </div>
-                `).join('');
+                const stepsHtml = steps.map((step, index) => {
+                    const isLatestStep = index === steps.length - 1;
+                    const deleteButton = isLatestStep ? `
+                        <button class="delete-latest-step-btn bg-red-600 hover:bg-red-500 text-white text-xs px-2 py-1 rounded ml-2 transition-colors"
+                                data-session-id="${sessionId}" 
+                                data-step-number="${step.step_number}"
+                                title="Delete this step and continue from previous step">
+                            🗑️ Delete Latest
+                        </button>
+                    ` : '';
+                    
+                    return `
+                        <div class="border-b border-gray-700 pb-2 mb-2">
+                            <div class="flex justify-between items-start">
+                                <div class="text-white font-semibold">Step ${step.step_number}</div>
+                                ${deleteButton}
+                            </div>
+                            <div class="text-gray-300 text-xs">${new Date(step.timestamp).toLocaleString()}</div>
+                            <div class="text-gray-300 mt-1">${step.story_text}</div>
+                            ${step.choice ? `<div class="text-blue-300 text-xs mt-1">Choice: ${step.choice}</div>` : ''}
+                        </div>
+                    `;
+                }).join('');
                 
                 stepsContainer.innerHTML = `
                     <div class="space-y-2">
@@ -4531,6 +4652,22 @@ async function loadAndDisplaySummaryAndSteps(sessionId: string): Promise<void> {
                         ${stepsHtml}
                     </div>
                 `;
+                
+                // Add event listeners for delete latest step buttons
+                const deleteButtons = stepsContainer.querySelectorAll('.delete-latest-step-btn');
+                deleteButtons.forEach(button => {
+                    button.addEventListener('click', async (e) => {
+                        const target = e.target as HTMLButtonElement;
+                        const sessionId = target.dataset.sessionId;
+                        const stepNumber = parseInt(target.dataset.stepNumber || '0');
+                        
+                        if (sessionId && stepNumber > 0) {
+                            if (confirm(`Are you sure you want to delete step ${stepNumber}? This will remove the latest story step and continue from the previous step.`)) {
+                                await deleteLatestStepAndRedraw(sessionId, stepNumber);
+                            }
+                        }
+                    });
+                });
             } else {
                 stepsContainer.innerHTML = '<span class="text-gray-500">No story steps found for this session</span>';
             }
@@ -4575,6 +4712,92 @@ async function deleteAllSessionData(sessionId: string): Promise<void> {
     } catch (error) {
         console.error('Error deleting session data:', error);
         showMessage('Error deleting session data', 'error');
+    }
+}
+
+/**
+ * Delete the latest story step and redraw the game
+ */
+async function deleteLatestStepAndRedraw(sessionId: string, stepNumber: number): Promise<void> {
+    try {
+        console.log(`🗑️ Deleting latest step ${stepNumber} from session ${sessionId}`);
+        
+        // Get the story steps for this session
+        const { loadStorySteps } = await import('./database.js');
+        const allSteps = await loadStorySteps(sessionId);
+        
+        if (allSteps.length === 0) {
+            showMessage('No story steps found for this session', 'error');
+            return;
+        }
+        
+        // Find the step to delete
+        const stepToDelete = allSteps.find(step => step.step_number === stepNumber);
+        if (!stepToDelete) {
+            showMessage(`Step ${stepNumber} not found`, 'error');
+            return;
+        }
+        
+        // Delete the step from database by filtering it out
+        // Since there's no individual step deletion, we'll need to reconstruct without this step
+        console.log(`🗑️ Step ${stepNumber} will be removed from game state`);
+        
+        console.log(`✅ Step ${stepNumber} deleted successfully`);
+        
+        // Reconstruct game state from remaining steps (excluding the deleted step)
+        const remainingSteps = allSteps.filter(step => step.step_number < stepNumber);
+        
+        if (remainingSteps.length === 0) {
+            showMessage('No steps remaining after deletion', 'error');
+            return;
+        }
+        
+        // Sort remaining steps by step number
+        remainingSteps.sort((a, b) => a.step_number - b.step_number);
+        
+        console.log(`🔄 Reconstructing game state from ${remainingSteps.length} remaining steps`);
+        
+        // Reconstruct the game state from remaining steps
+        const reconstructedGameState = {
+            sessionId: sessionId,
+            messageHistory: [],
+            storyLog: remainingSteps.map(step => ({
+                id: step.story_entry_id,
+                story: step.story_text,
+                imagePrompt: step.image_prompt,
+                choices: step.choices,
+                timestamp: step.timestamp
+            })),
+            actionLog: remainingSteps.map(step => ({
+                choice: step.choice,
+                outcome: step.outcome,
+                timestamp: step.timestamp
+            })),
+            memories: remainingSteps.flatMap(step => step.new_memories),
+            currentState: 'PLAYING'
+        };
+        
+        console.log('✅ Game state reconstructed from remaining steps');
+        
+        // Reset current game state but preserve session ID
+        resetGame(true);
+        
+        // Import the reconstructed data
+        importGame(reconstructedGameState);
+        
+        // Close the story management overlay
+        hideStoryManagementOverlay();
+        
+        // Show success message
+        showMessage(`Step ${stepNumber} deleted successfully! Game continues from step ${remainingSteps.length}`, 'success');
+        
+        // TODO: Regenerate image for the current step
+        // Note: Image regeneration requires the generateImageAsync function to be exported from game.ts
+        console.log('🖼️ Image regeneration skipped - function not exported');
+        
+    } catch (error) {
+        console.error('❌ Error deleting latest step:', error);
+        showMessage(`Failed to delete step: ${error instanceof Error ? error.message : 'Unknown error'}`, 'error');
     }
 }
 

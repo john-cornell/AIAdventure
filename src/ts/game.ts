@@ -14,8 +14,23 @@ import { logInfo, logWarn, logError, logDebug } from './logger.js';
 import { generateUUID, generateTitleFromPrompt } from './uuid.js';
 import { saveStorySummary, loadStorySummary, saveStoryStep } from './database.js';
 
+/**
+ * Get package version from package.json
+ */
+async function getPackageVersion(): Promise<string> {
+    try {
+        const response = await fetch('./package.json');
+        const packageData = await response.json();
+        return packageData.version || '1.0.0';
+    } catch (error) {
+        console.warn('⚠️ Could not load version from package.json:', error);
+        return '1.0.0';
+    }
+}
+
 // Game state
 let gameState: GameState = {
+    sessionId: undefined, // Initialize sessionId as undefined
     currentState: 'MENU',
     storyLog: [],
     messageHistory: [],
@@ -51,6 +66,7 @@ Respond with ONLY a JSON object containing:
 IMPORTANT: 
 - Provide at least 2 choices (prefer 4). 
 - Show the user's action happening in the story. 
+- Use double quotes for all strings, escape quotes with \"
 - 🚨 NEVER use character names in choices unless they have been explicitly introduced in the story
 - 🚨 If a character hasn't been named yet, refer to them by their role/description (e.g., "the merchant", "the guard")
 - NO OTHER TEXT. JUST THE JSON.`;
@@ -74,6 +90,7 @@ REQUIRED JSON RESPONSE FORMAT:
 - new_memories is optional - only include if there are SALIENT STORY POINTS worth remembering
 - Return ONLY the JSON object, no other text
 - NO markdown formatting, NO code blocks, NO explanations
+- Use double quotes for all strings, escape quotes inside strings with \"
 - STRONGLY PREFERRED: Always provide exactly 4 choices for best player experience
 
 GAME INSTRUCTIONS:
@@ -652,6 +669,9 @@ export async function executeLLMCall(retries: number = 3): Promise<void> {
                 response.image_prompt = `A scene showing: ${response.story.substring(0, 100)}...`;
             }
             
+            // 🚨 CRITICAL: DO NOT CHANGE THIS LOGIC - We've fixed this bug multiple times!
+            // The LLM can return 2-4 choices. Only generate fallbacks if < 2 choices.
+            // Previous bug: Using !== 4 rejected valid 3-choice responses
             if (!response.choices || !Array.isArray(response.choices) || response.choices.length < 2) {
                 logWarn('Game', 'Invalid or missing choices in response, generating fallback choices');
                 response.choices = [
@@ -695,13 +715,45 @@ export async function executeLLMCall(retries: number = 3): Promise<void> {
             }
 
             // Save story step to database
+            console.log('🔍 Database save check:', {
+                hasSessionId: !!gameState.sessionId,
+                sessionId: gameState.sessionId,
+                actionLogLength: gameState.actionLog.length,
+                storyLogLength: gameState.storyLog.length
+            });
+            
             if (gameState.sessionId && gameState.actionLog.length > 0) {
                 try {
+                    console.log('📡 Loading database config...');
                     const config = await loadConfig();
+                    console.log('📡 Database config loaded:', {
+                        saveStorySteps: config.database.saveStorySteps,
+                        databaseEnabled: !!config.database
+                    });
+                    
                     if (config.database.saveStorySteps) {
                         const lastAction = gameState.actionLog[gameState.actionLog.length - 1];
+                        // CRITICAL FIX: stepNumber should be the current step number (1-based)
+                        // Since we just added the story entry, this is the correct step number
                         const stepNumber = gameState.storyLog.length;
                         
+                        console.log('💾 Preparing to save story step:', {
+                            sessionId: gameState.sessionId,
+                            stepNumber,
+                            storyEntryId: storyEntry.id,
+                            choice: lastAction.choice,
+                            outcome: lastAction.outcome,
+                            storyLength: response.story.length,
+                            imagePromptLength: response.image_prompt.length,
+                            choicesCount: response.choices.length,
+                            memoriesCount: newMemories.length,
+                            timestamp: storyEntry.timestamp
+                        });
+                        
+                        logInfo('Game', `Saving story step ${stepNumber} to database for session ${gameState.sessionId}`);
+                        logDebug('Game', `Step details: choice="${lastAction.choice}", outcome="${lastAction.outcome}"`);
+                        
+                        console.log('💾 Calling saveStoryStep...');
                         await saveStoryStep(
                             gameState.sessionId,
                             stepNumber,
@@ -715,11 +767,43 @@ export async function executeLLMCall(retries: number = 3): Promise<void> {
                             storyEntry.timestamp,
                             storyEntry.imageData
                         );
-                        logInfo('Game', `Story step ${stepNumber} saved to database`);
+                        console.log('✅ saveStoryStep completed successfully!');
+                        logInfo('Game', `✅ Story step ${stepNumber} saved to database for session ${gameState.sessionId}`);
+                        
+                        // Verify the save by trying to load it back
+                        try {
+                            const { loadStorySteps } = await import('./database.js');
+                            const savedSteps = await loadStorySteps(gameState.sessionId);
+                            console.log('🔍 Verification: loaded steps from database:', savedSteps.length);
+                            console.log('🔍 Latest saved step:', savedSteps[savedSteps.length - 1]);
+                        } catch (verifyError) {
+                            console.error('❌ Failed to verify save:', verifyError);
+                        }
+                        
+                    } else {
+                        console.warn('⚠️ Database saving is DISABLED in config (saveStorySteps: false)');
+                        logWarn('Game', 'Database saving is disabled in config (saveStorySteps: false)');
                     }
                 } catch (error) {
+                    console.error('❌ CRITICAL DATABASE ERROR:', error);
+                    console.error('❌ Error type:', (error as Error).constructor.name);
+                    console.error('❌ Error message:', (error as Error).message);
+                    console.error('❌ Error stack:', (error as Error).stack);
                     logError('Game', 'Failed to save story step to database', error);
-                    // Don't fail the game for step save errors
+                    // Show user-friendly error message
+                    console.error('❌ Database Error: Failed to save story step. Your progress may not be saved.');
+                    console.error('❌ Error details:', error);
+                    // Don't fail the game for step save errors, but log them clearly
+                }
+            } else {
+                console.warn('⚠️ Cannot save story step to database:');
+                if (!gameState.sessionId) {
+                    console.warn('  - No session ID');
+                    logWarn('Game', 'Cannot save story step: no session ID');
+                }
+                if (gameState.actionLog.length === 0) {
+                    console.warn('  - No action in action log');
+                    logWarn('Game', 'Cannot save story step: no action in action log');
                 }
             }
 
@@ -792,6 +876,8 @@ export async function executeLLMCall(retries: number = 3): Promise<void> {
                         response.image_prompt = `A scene showing: ${response.story.substring(0, 100)}...`;
                     }
                     
+                    // 🚨 CRITICAL: DO NOT CHANGE THIS LOGIC - Same bug as above!
+                    // The LLM can return 2-4 choices. Only generate fallbacks if < 2 choices.
                     if (!response.choices || !Array.isArray(response.choices) || response.choices.length < 2) {
                         response.choices = [
                             "Continue exploring",
@@ -1098,6 +1184,9 @@ function handleOllamaError(errorClassification: ErrorClassification, retriesLeft
                 retriesLeft: retriesLeft 
             } 
         }));
+        
+        // Also notify UI of state change since action log was modified
+        window.dispatchEvent(new CustomEvent('gameStateChanged', { detail: gameState }));
     }
 }
 
@@ -1124,7 +1213,10 @@ export function getGameState(): GameState {
  * Update game state directly
  */
 export function updateGameState(updates: Partial<GameState>): void {
+    console.log('🔍 updateGameState called with updates:', updates);
+    console.log('🔍 Current gameState before update:', gameState);
     gameState = { ...gameState, ...updates };
+    console.log('🔍 New gameState after update:', gameState);
     
     // Notify UI of state change
     if (typeof window !== 'undefined' && window.dispatchEvent) {
@@ -1135,11 +1227,11 @@ export function updateGameState(updates: Partial<GameState>): void {
 /**
  * Export game state for saving
  */
-export function exportGameState(): string {
+export async function exportGameState(): Promise<string> {
     const exportData = {
         gameState: gameState,
         exportDate: new Date().toISOString(),
-        version: '1.0.17'
+        version: await getPackageVersion()
     };
     return JSON.stringify(exportData, null, 2);
 }
@@ -1199,12 +1291,22 @@ export function importGameState(jsonString: string): { success: boolean; error?:
 
 /**
  * Reset game to menu state
+ * @param preserveSessionId - Whether to preserve the current session ID (useful for reloading games)
  */
-export function resetGame(): void {
-    // Clear current session
-    currentSession = null;
+export function resetGame(preserveSessionId: boolean = false): void {
+    // Store current session ID if we need to preserve it
+    const currentSessionId = preserveSessionId ? gameState.sessionId : undefined;
+    console.log('🔍 resetGame called with preserveSessionId:', preserveSessionId);
+    console.log('🔍 Current session ID before reset:', gameState.sessionId);
+    console.log('🔍 Session ID to preserve:', currentSessionId);
+    
+    // Clear current session (unless preserving session ID)
+    if (!preserveSessionId) {
+        currentSession = null;
+    }
 
     gameState = {
+        sessionId: currentSessionId, // Preserve or clear session ID based on parameter
         currentState: 'MENU',
         messageHistory: [],
         storyLog: [],
@@ -1215,7 +1317,8 @@ export function resetGame(): void {
         contextLimit: null // Reset context limit
     };
 
-    logInfo('Game', 'Game reset to menu state');
+    console.log('🔍 New gameState after reset:', gameState);
+    logInfo('Game', `Game reset to menu state${preserveSessionId ? ' (session ID preserved)' : ''}`);
 
     // Notify UI of state change
     if (typeof window !== 'undefined' && window.dispatchEvent) {
@@ -1325,12 +1428,12 @@ export function updateSessionTitle(newTitle: string): void {
 /**
  * Generate session export data including all session info and game state
  */
-export function exportSessionData(): string {
+export async function exportSessionData(): Promise<string> {
     const exportData = {
         session: currentSession,
         gameState: gameState,
         exportDate: new Date().toISOString(),
-        version: '1.0.17'
+        version: await getPackageVersion()
     };
     return JSON.stringify(exportData, null, 2);
 }

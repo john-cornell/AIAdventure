@@ -79,6 +79,46 @@
             try {
                 console.log('📦 Loading game modules...');
                 
+                // Load and display version
+                try {
+                    const response = await fetch('./package.json');
+                    const packageData = await response.json();
+                    const versionElement = document.getElementById('version-display');
+                    if (versionElement) {
+                        versionElement.textContent = `v${packageData.version}`;
+                        console.log(`📦 Game version: ${packageData.version}`);
+                    }
+                } catch (versionError) {
+                    console.warn('⚠️ Could not load version from package.json:', versionError);
+                                         document.getElementById('version-display').textContent = 'v1.0.24';
+                }
+                
+                // Check database status
+                try {
+                    const databaseStatusElement = document.getElementById('database-status');
+                    if (databaseStatusElement) {
+                        // Try to access IndexedDB to check if it's working
+                        const testDB = indexedDB.open('test-db', 1);
+                        testDB.onsuccess = () => {
+                            testDB.result.close();
+                            indexedDB.deleteDatabase('test-db');
+                            databaseStatusElement.textContent = 'DB: Ready';
+                            databaseStatusElement.className = 'text-green-300';
+                        };
+                        testDB.onerror = () => {
+                            databaseStatusElement.textContent = 'DB: Error';
+                            databaseStatusElement.className = 'text-red-300';
+                        };
+                    }
+                } catch (dbError) {
+                    console.warn('⚠️ Could not check database status:', dbError);
+                    const databaseStatusElement = document.getElementById('database-status');
+                    if (databaseStatusElement) {
+                        databaseStatusElement.textContent = 'DB: Unknown';
+                        databaseStatusElement.className = 'text-yellow-300';
+                    }
+                }
+                
                 // Initialize the game UI
                 await initializeUI();
                 
@@ -147,7 +187,11 @@
             <div class="flex items-center gap-2">
                 <span class="text-indigo-200">🎮</span>
                 <span class="font-semibold">AI Adventure</span>
-                                  <span class="text-indigo-300">v1.0.17</span>
+                <span class="text-indigo-300" id="version-display">Loading...</span>
+            </div>
+            <div class="flex items-center gap-2 mt-1 text-xs">
+                <span class="text-indigo-200">💾</span>
+                <span class="text-indigo-300" id="database-status">DB: Loading...</span>
             </div>
         </div>
     </div>

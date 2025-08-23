@@ -4,6 +4,7 @@ import {
     SDModelsResponse 
 } from './types.js';
 import { loadConfig } from './config.js';
+import { logInfo, logDebug } from './logger.js';
 
 /**
  * Generate images locally using Stable Diffusion
@@ -74,14 +75,14 @@ export async function generateLocalImage(
         .map(ti => ti.trigger.trim())
         .join(', ');
 
-    console.log('🎨 Using LORAs:', loraConfigs);
-    console.log('🎨 LORA Syntax:', loraSyntax);
-    console.log('🎨 LORA Tags:', loraTags);
-    console.log('🎨 Using Textual Inversions:', enabledTextualInversions.map(ti => ti.name));
-    console.log('🎨 Positive Textual Inversion Tags:', positiveTextualInversionTags);
-    console.log('🎨 Positive Textual Inversion Triggers:', positiveTextualInversionTriggers);
-    console.log('🎨 Negative Textual Inversion Tags:', negativeTextualInversionTags);
-    console.log('🎨 Negative Textual Inversion Triggers:', negativeTextualInversionTriggers);
+    logDebug('SD', `Using LORAs: ${JSON.stringify(loraConfigs)}`);
+    logDebug('SD', `LORA Syntax: ${loraSyntax}`);
+    logDebug('SD', `LORA Tags: ${loraTags}`);
+    logDebug('SD', `Using Textual Inversions: ${enabledTextualInversions.map(ti => ti.name).join(', ')}`);
+    logDebug('SD', `Positive Textual Inversion Tags: ${positiveTextualInversionTags}`);
+    logDebug('SD', `Positive Textual Inversion Triggers: ${positiveTextualInversionTriggers}`);
+    logDebug('SD', `Negative Textual Inversion Tags: ${negativeTextualInversionTags}`);
+    logDebug('SD', `Negative Textual Inversion Triggers: ${negativeTextualInversionTriggers}`);
 
     // Enhanced positive prompt with LORA syntax, tags and positive Textual Inversion triggers/tags
     const baseEnhancement = `photorealistic, highly detailed, professional photography, 8k uhd, dslr, high quality, sharp focus, perfect lighting, cinematic lighting, masterpiece, best quality, ultra detailed, dynamic action, motion capture, dramatic composition, action shot`;
@@ -112,18 +113,18 @@ export async function generateLocalImage(
         ? `${baseNegativePrompt}, ${negativeEnhancementTags}`
         : baseNegativePrompt;
 
-    // Log the complete prompt information
-    console.log('🎨 === IMAGE GENERATION PROMPT ===');
-    console.log('🎨 Original Prompt:', prompt);
-    console.log('🎨 Enhanced Positive Prompt:', enhancedPrompt);
-    console.log('🎨 Negative Prompt:', negativePrompt);
-    console.log('🎨 Model:', model);
-    console.log('🎨 Dimensions:', `${imageWidth}x${imageHeight}`);
-    console.log('🎨 Steps:', options.steps);
-    console.log('🎨 CFG Scale:', options.cfg_scale);
-    console.log('🎨 Sampler:', options.sampler_name);
-    console.log('🎨 LORAs:', loraConfigs);
-    console.log('🎨 ================================');
+    // Log the complete prompt information (DEBUG level)
+    logDebug('SD', '=== IMAGE GENERATION PROMPT ===');
+    logDebug('SD', `Original Prompt: ${prompt}`);
+    logDebug('SD', `Enhanced Positive Prompt: ${enhancedPrompt}`);
+    logDebug('SD', `Negative Prompt: ${negativePrompt}`);
+    logDebug('SD', `Model: ${model}`);
+    logDebug('SD', `Dimensions: ${imageWidth}x${imageHeight}`);
+    logDebug('SD', `Steps: ${options.steps}`);
+    logDebug('SD', `CFG Scale: ${options.cfg_scale}`);
+    logDebug('SD', `Sampler: ${options.sampler_name}`);
+    logDebug('SD', `LORAs: ${JSON.stringify(loraConfigs)}`);
+    logDebug('SD', '================================');
 
     try {
         const response = await fetch(`${sdUrl}/sdapi/v1/txt2img`, {
@@ -716,13 +717,13 @@ export async function generateLocalImageWithFaceRestoration(
         .map(ti => ti.trigger.trim())
         .join(', ');
 
-    console.log('🎨 Using LORAs with face restoration:', loraConfigs);
-    console.log('🎨 LORA Syntax:', loraSyntax);
-    console.log('🎨 LORA Tags:', loraTags);
-    console.log('🎨 Positive Textual Inversion Tags:', positiveTextualInversionTags);
-    console.log('🎨 Positive Textual Inversion Triggers:', positiveTextualInversionTriggers);
-    console.log('🎨 Negative Textual Inversion Tags:', negativeTextualInversionTags);
-    console.log('🎨 Negative Textual Inversion Triggers:', negativeTextualInversionTriggers);
+    logDebug('SD', `Using LORAs with face restoration: ${JSON.stringify(loraConfigs)}`);
+    logDebug('SD', `LORA Syntax: ${loraSyntax}`);
+    logDebug('SD', `LORA Tags: ${loraTags}`);
+    logDebug('SD', `Positive Textual Inversion Tags: ${positiveTextualInversionTags}`);
+    logDebug('SD', `Positive Textual Inversion Triggers: ${positiveTextualInversionTriggers}`);
+    logDebug('SD', `Negative Textual Inversion Tags: ${negativeTextualInversionTags}`);
+    logDebug('SD', `Negative Textual Inversion Triggers: ${negativeTextualInversionTriggers}`);
 
     // Enhanced positive prompt for face restoration with LORA syntax, tags and positive Textual Inversions
     const baseEnhancement = `photorealistic, highly detailed, professional photography, 8k uhd, dslr, high quality, sharp focus, perfect lighting, cinematic lighting, masterpiece, best quality, ultra detailed`;
@@ -754,19 +755,19 @@ export async function generateLocalImageWithFaceRestoration(
         : baseNegativePrompt;
 
     // Log the complete prompt information for face restoration
-    console.log('🎨 === FACE RESTORATION IMAGE GENERATION PROMPT ===');
-    console.log('🎨 Original Prompt:', prompt);
-    console.log('🎨 Enhanced Positive Prompt:', enhancedPrompt);
-    console.log('🎨 Negative Prompt:', negativePrompt);
-    console.log('🎨 Model:', model);
-    console.log('🎨 Dimensions:', `${imageWidth}x${imageHeight}`);
-    console.log('🎨 Steps:', options.steps);
-    console.log('🎨 CFG Scale:', options.cfg_scale);
-    console.log('🎨 Sampler:', options.sampler_name);
-    console.log('🎨 LORAs:', loraConfigs);
-    console.log('🎨 Face Restoration:', enableFaceRestoration);
-    console.log('🎨 Face Restoration Model: CodeFormer');
-    console.log('🎨 ================================================');
+    logDebug('SD', '=== FACE RESTORATION IMAGE GENERATION PROMPT ===');
+    logDebug('SD', `Original Prompt: ${prompt}`);
+    logDebug('SD', `Enhanced Positive Prompt: ${enhancedPrompt}`);
+    logDebug('SD', `Negative Prompt: ${negativePrompt}`);
+    logDebug('SD', `Model: ${model}`);
+    logDebug('SD', `Dimensions: ${imageWidth}x${imageHeight}`);
+    logDebug('SD', `Steps: ${options.steps}`);
+    logDebug('SD', `CFG Scale: ${options.cfg_scale}`);
+    logDebug('SD', `Sampler: ${options.sampler_name}`);
+    logDebug('SD', `LORAs: ${JSON.stringify(loraConfigs)}`);
+    logDebug('SD', `Face Restoration: ${enableFaceRestoration}`);
+    logDebug('SD', 'Face Restoration Model: CodeFormer');
+    logDebug('SD', '================================================');
 
     try {
         const response = await fetch(`${sdUrl}/sdapi/v1/txt2img`, {

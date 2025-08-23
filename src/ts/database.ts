@@ -76,10 +76,10 @@ export async function initializeDatabase(): Promise<void> {
         const dbName = 'AIAdventureDB';
         db = new GameDatabase(dbName);
         
-        logInfo('Database', `Database '${dbName}' initialized successfully (version 2)`);
+        logInfo('Database', `Database '${dbName}' initialized successfully (version 3)`);
         logDebug('Database', 'Database configuration:', {
             name: dbName,
-            version: 2,
+            version: 3,
             maxEntries: 10000,
             autoBackup: true,
             backupInterval: 60
@@ -456,6 +456,12 @@ export async function saveStoryStep(
 ): Promise<number> {
     try {
         const database = getDatabase();
+        
+        // Verify the storySteps table exists
+        if (!database.storySteps) {
+            throw new Error('StorySteps table does not exist in database');
+        }
+        
         const stepRecord: StoryStepRecord = {
             session_id: sessionId,
             step_number: stepNumber,
@@ -471,12 +477,39 @@ export async function saveStoryStep(
             image_data: imageData
         };
 
+        logDebug('Database', `Attempting to save story step ${stepNumber} for session ${sessionId}`);
+        logDebug('Database', `Step record:`, {
+            sessionId,
+            stepNumber,
+            storyEntryId,
+            choice,
+            outcome,
+            storyTextLength: storyText.length,
+            imagePromptLength: imagePrompt.length,
+            choicesCount: choices.length,
+            newMemoriesCount: newMemories.length,
+            timestamp,
+            hasImageData: !!imageData
+        });
+
         const id = await database.storySteps.add(stepRecord);
-        logInfo('Database', `Story step ${stepNumber} saved for session ${sessionId}`);
+        logInfo('Database', `✅ Story step ${stepNumber} saved for session ${sessionId} with ID ${id}`);
         return id as number;
         
     } catch (error) {
-        logError('Database', `Failed to save story step ${stepNumber} for session ${sessionId}`, error);
+        logError('Database', `❌ Failed to save story step ${stepNumber} for session ${sessionId}`, error);
+        
+        // Provide more detailed error information
+        if (error instanceof Error) {
+            if (error.message.includes('table does not exist')) {
+                logError('Database', 'CRITICAL: StorySteps table is missing. Database may not be properly initialized.');
+            } else if (error.message.includes('database is closed')) {
+                logError('Database', 'CRITICAL: Database connection is closed.');
+            } else if (error.message.includes('quota exceeded')) {
+                logError('Database', 'CRITICAL: Database storage quota exceeded.');
+            }
+        }
+        
         throw error;
     }
 }

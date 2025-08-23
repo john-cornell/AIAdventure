@@ -7,6 +7,8 @@ import {
     Message 
 } from './types.js';
 import { loadConfig } from './config.js';
+import { logInfo, logDebug, logWarn } from './logger.js';
+import { cleanAndParseJson, validateLLMResponse, reconstructMissingFields } from './json-cleaner.js';
 
 /**
  * Replace window.call_llm with local Ollama implementation
@@ -20,13 +22,13 @@ export async function callLocalLLM(
     messageHistory: Message[], 
     jsonFields: Array<{ name: string; type: string }>
 ): Promise<LLMResponse> {
-    console.log('🚀 callLocalLLM: Starting...');
+    logInfo('Ollama', 'Starting callLocalLLM...');
     const config = await loadConfig();
     const ollamaUrl = config.ollama.url;
     const model = config.ollama.model;
     const options = config.ollama.options;
     
-    console.log('🔧 callLocalLLM: Config - URL:', ollamaUrl, 'Model:', model);
+    logInfo('Ollama', `Config - URL: ${ollamaUrl}, Model: ${model}`);
 
     // Format messages for Ollama API - use prompt format for better compatibility
     const messages = [
@@ -36,21 +38,21 @@ export async function callLocalLLM(
     
     // Convert messages to a single prompt string with stronger formatting instructions
     const prompt = messages.map(msg => `${msg.role === 'system' ? 'System: ' : 'User: '}${msg.content}`).join('\n\n') + '\n\nAssistant: RESPOND WITH ONLY A COMPLETE JSON OBJECT. NO OTHER TEXT. NO EXPLANATIONS. NO MARKDOWN. JUST THE JSON.';
-    console.log('📝 callLocalLLM: Prompt length:', prompt.length, 'characters');
+    logInfo('Ollama', `Prompt length: ${prompt.length} characters`);
     
-    // Log the full prompt for debugging (verbose logging)
-    console.log('📝 callLocalLLM: Full prompt being sent to LLM:');
-    console.log('='.repeat(80));
-    console.log(prompt);
-    console.log('='.repeat(80));
+    // Log the full prompt for debugging (verbose logging) - DEBUG level only
+    logDebug('Ollama', 'Full prompt being sent to LLM:');
+    logDebug('Ollama', '='.repeat(80));
+    logDebug('Ollama', prompt);
+    logDebug('Ollama', '='.repeat(80));
 
     try {
-        console.log('📡 callLocalLLM: Making fetch request to:', `${ollamaUrl}/api/generate`);
+        logInfo('Ollama', `Making fetch request to: ${ollamaUrl}/api/generate`);
         
         // Create abort controller for timeout
         const controller = new AbortController();
         const timeoutId = setTimeout(() => {
-            console.warn('⏰ callLocalLLM: Request timeout after 60 seconds');
+            logWarn('Ollama', 'Request timeout after 60 seconds');
             controller.abort();
         }, 60000); // 60 second timeout
         
@@ -84,78 +86,45 @@ export async function callLocalLLM(
             throw new Error('No response received from Ollama');
         }
 
-        // Parse JSON response from LLM
-        console.log('🔍 callLocalLLM: Parsing JSON response...');
+        // Parse JSON response from LLM using robust cleaning
+        logDebug('Ollama', 'Parsing JSON response...');
         let parsedResponse: LLMResponse;
         
-        // Extract JSON from markdown code blocks if present
-        let jsonString = data.response.trim();
-        if (jsonString.startsWith('```json') && jsonString.endsWith('```')) {
-            // Remove markdown code block formatting
-            jsonString = jsonString.slice(7, -3).trim(); // Remove ```json and ```
-            console.log('🔧 callLocalLLM: Extracted JSON from markdown code block');
-        } else if (jsonString.startsWith('```') && jsonString.endsWith('```')) {
-            // Remove generic markdown code block formatting
-            jsonString = jsonString.slice(3, -3).trim(); // Remove ``` and ```
-            console.log('🔧 callLocalLLM: Extracted JSON from generic markdown code block');
+        const cleanResult = cleanAndParseJson(data.response);
+        
+        if (!cleanResult.success) {
+            console.error('❌ callLocalLLM: Failed to parse JSON response:', cleanResult.error);
+            console.error('❌ callLocalLLM: Raw response:', data.response);
+            console.error('❌ callLocalLLM: Cleaned attempt:', cleanResult.cleaned);
+            throw new Error(`Invalid JSON response from LLM: ${cleanResult.error}`);
         }
         
-        // Handle multiple JSON objects by finding the last valid one
-        let lastValidJson = '';
-        const jsonMatches = jsonString.match(/\{[^{}]*(?:\{[^{}]*\}[^{}]*)*\}/g);
+        parsedResponse = cleanResult.json;
         
-        if (jsonMatches && jsonMatches.length > 0) {
-            // Try each JSON object from last to first (most recent first)
-            for (let i = jsonMatches.length - 1; i >= 0; i--) {
-                try {
-                    const testJson = jsonMatches[i];
-                    const parsed = JSON.parse(testJson); // Test if valid JSON
-                    
-                    // Additional validation: ensure this is a story response, not a previous one
-                    if (parsed.story && parsed.choices && Array.isArray(parsed.choices)) {
-                        lastValidJson = testJson;
-                        console.log('🔧 callLocalLLM: Found valid story JSON object at position', i, 'with', parsed.choices.length, 'choices');
-                        break;
-                    } else {
-                        console.log('🔧 callLocalLLM: Skipping invalid story JSON at position', i);
-                    }
-                } catch (e) {
-                    console.log('🔧 callLocalLLM: Invalid JSON at position', i);
-                    // Continue to next match
-                }
-            }
+        // Log cleaning issues if any
+        if (cleanResult.originalIssues && cleanResult.originalIssues.length > 0) {
+            logWarn('Ollama', `JSON required cleaning: ${cleanResult.originalIssues.join(', ')}`);
         }
         
-        // If no valid JSON found in matches, try the original string
-        if (!lastValidJson) {
-            lastValidJson = jsonString;
-        }
-        
-        try {
-            parsedResponse = JSON.parse(lastValidJson);
-            console.log('✅ callLocalLLM: Successfully parsed JSON:', parsedResponse);
-        } catch (parseError) {
-            console.error('❌ callLocalLLM: Failed to parse LLM response as JSON:', data.response);
-            console.error('❌ callLocalLLM: Extracted JSON string:', lastValidJson);
-            throw new Error('Invalid JSON response from LLM');
-        }
+        logDebug('Ollama', 'Successfully parsed JSON:', parsedResponse);
 
-        // Validate required fields
-        console.log('🔍 callLocalLLM: Validating required fields:', jsonFields.map(f => f.name));
-        console.log('🔍 callLocalLLM: Parsed response keys:', Object.keys(parsedResponse));
-        const missingFields = jsonFields.filter(field => !(field.name in parsedResponse));
-        if (missingFields.length > 0) {
-            console.error('❌ callLocalLLM: Missing required fields:', missingFields.map(f => f.name));
+        // Validate required fields using the utility function
+        logDebug('Ollama', `Validating required fields: ${jsonFields.map(f => f.name)}`);
+        logDebug('Ollama', `Parsed response keys: ${Object.keys(parsedResponse)}`);
+        
+        const requiredFieldNames = jsonFields.map(f => f.name);
+        const validation = validateLLMResponse(parsedResponse, requiredFieldNames);
+        
+        if (!validation.valid) {
+            console.error('❌ callLocalLLM: Missing required fields:', validation.missing);
             console.error('❌ callLocalLLM: Full parsed response:', parsedResponse);
             console.error('❌ callLocalLLM: Raw LLM response:', data.response);
             
-            // Provide more helpful error message
-            const missingFieldNames = missingFields.map(f => f.name).join(', ');
-            const errorMessage = `LLM response incomplete. Missing required fields: ${missingFieldNames}. 
-Expected format: {"story": "...", "image_prompt": "...", "choices": ["...", "...", "...", "..."]}
-Received: ${JSON.stringify(parsedResponse)}`;
+            // Attempt to reconstruct missing fields
+            logWarn('Ollama', 'Attempting to reconstruct missing fields with fallbacks');
+            parsedResponse = reconstructMissingFields(parsedResponse, requiredFieldNames);
             
-            throw new Error(errorMessage);
+            logInfo('Ollama', 'Reconstructed response with fallback values');
         }
 
         // Validate choices array only if it's expected in the response
@@ -167,8 +136,8 @@ Received: ${JSON.stringify(parsedResponse)}`;
                     console.error('❌ callLocalLLM: Choices received:', parsedResponse.choices);
                     throw new Error(`Invalid choices array. Expected at least 2 choices, got: ${parsedResponse.choices.length}`);
                 } else if (parsedResponse.choices.length < 4) {
-                    console.warn(`⚠️ callLocalLLM: Choices array has ${parsedResponse.choices.length} elements (fewer than preferred 4)`);
-                    console.log('📝 callLocalLLM: Choices received:', parsedResponse.choices);
+                    logWarn('Ollama', `Choices array has ${parsedResponse.choices.length} elements (fewer than preferred 4)`);
+                    logDebug('Ollama', `Choices received: ${JSON.stringify(parsedResponse.choices)}`);
                     // Accept as is - don't automatically add choices, let LLM decide
                 } else if (parsedResponse.choices.length > 6) {
                     console.warn('⚠️ callLocalLLM: Choices array has more than 6 elements, truncating to first 6');
