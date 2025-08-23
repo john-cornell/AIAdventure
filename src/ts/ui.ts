@@ -15,6 +15,205 @@ import { callLocalLLMWithRetry, getAvailableOllamaModels, testOllamaConnection a
 import { generateLocalImageWithRetry, getAvailableSDModels, getAvailableLoraModels, getAvailableTextualInversionModels, testSDConnection as testSD } from './stable-diffusion.js';
 import { startGame, updateGame, getGameState, resetGame, updateGameState, autoSummarizeSteps } from './game.js';
 
+// UI Utility Constants - Eliminates duplicate CSS classes
+const UI_CLASSES = {
+    // Input fields
+    input: "w-full bg-gray-800 border border-gray-600 rounded-lg px-4 py-2 text-white",
+    inputSmall: "w-full bg-gray-800 border border-gray-600 rounded-lg px-2 py-1 text-white",
+    inputFlex: "flex-1 bg-gray-800 border border-gray-600 rounded-lg px-4 py-2 text-white",
+    
+    // Labels
+    label: "block text-sm font-medium text-gray-300 mb-2",
+    
+    // Help text
+    helpText: "text-xs text-gray-400 mt-1",
+    
+    // Buttons
+    button: (color: string, size: 'sm' | 'md' | 'lg' = 'md') => {
+        const padding = size === 'sm' ? 'px-3 py-1' : size === 'lg' ? 'px-6 py-2' : 'px-4 py-2';
+        const textSize = size === 'sm' ? 'text-sm' : '';
+        return `bg-${color}-600 hover:bg-${color}-500 text-white ${padding} rounded-lg ${textSize}`;
+    },
+    
+    // Modal containers
+    modal: (maxWidth: string, height: string = 'max-h-[95vh]') => 
+        `bg-gray-900 border border-gray-700 rounded-lg ${maxWidth} w-full ${height} flex flex-col`,
+    
+    // Tab buttons
+    tabButton: (isActive: boolean = false) => 
+        `tab-button py-2 px-1 border-b-2 ${isActive ? 'border-indigo-500 text-indigo-400' : 'border-transparent text-gray-400 hover:text-gray-300'} font-medium`,
+    
+    // Data containers
+    dataContainer: "text-sm text-gray-300 font-mono bg-gray-900 p-4 rounded border border-gray-600 max-h-96 overflow-y-auto",
+    
+    // Section containers
+    sectionContainer: "p-4 bg-gray-800 rounded-lg border border-gray-600",
+    
+    // Close buttons
+    closeButton: "text-gray-400 hover:text-white text-2xl"
+};
+
+// UI Component Builders - Eliminates duplicate HTML patterns
+const UI_COMPONENTS = {
+    // Create modal header with title and close button
+    modalHeader: (title: string, closeButtonId: string, showActions: boolean = false, actions?: string): string => `
+        <div class="p-6 border-b border-gray-700">
+            <div class="flex justify-between items-center">
+                <div class="flex items-center gap-4">
+                    <h2 class="text-2xl font-bold text-white">${title}</h2>
+                    ${showActions && actions ? actions : ''}
+                </div>
+                <button id="${closeButtonId}" class="${UI_CLASSES.closeButton}">&times;</button>
+            </div>
+        </div>
+    `,
+    
+    // Create tab navigation
+    tabNavigation: (tabs: Array<{id: string, label: string, icon: string, isActive?: boolean}>): string => `
+        <div class="border-b border-gray-700 mb-6 px-6">
+            <nav class="flex space-x-8">
+                ${tabs.map(tab => `
+                    <button id="${tab.id}" class="${UI_CLASSES.tabButton(tab.isActive)}">
+                        ${tab.icon} ${tab.label}
+                    </button>
+                `).join('')}
+            </nav>
+        </div>
+    `,
+    
+    // Create form field with label, input, and help text
+    formField: (label: string, inputType: string, inputId: string, helpText?: string, inputClass?: string, additionalProps?: string): string => `
+        <div>
+            <label class="${UI_CLASSES.label}">${label}</label>
+            <input type="${inputType}" id="${inputId}" 
+                   class="${inputClass || UI_CLASSES.input}" ${additionalProps || ''}>
+            ${helpText ? `<div class="${UI_CLASSES.helpText}">${helpText}</div>` : ''}
+        </div>
+    `,
+    
+    // Create select field with label and help text
+    selectField: (label: string, selectId: string, options: Array<{value: string, label: string}>, helpText?: string): string => `
+        <div>
+            <label class="${UI_CLASSES.label}">${label}</label>
+            <select id="${selectId}" class="${UI_CLASSES.input}">
+                ${options.map(option => `<option value="${option.value}">${option.value}</option>`).join('')}
+            </select>
+            ${helpText ? `<div class="${UI_CLASSES.helpText}">${helpText}</div>` : ''}
+        </div>
+    `,
+    
+    // Create button with consistent styling
+    button: (id: string, text: string, color: string, size: 'sm' | 'md' | 'lg' = 'md', additionalClasses?: string): string => `
+        <button id="${id}" class="${UI_CLASSES.button(color, size)} ${additionalClasses || ''}">
+            ${text}
+        </button>
+    `,
+    
+    // Create action button group
+    buttonGroup: (buttons: Array<{id: string, text: string, color: string, icon?: string}>): string => `
+        <div class="flex gap-2 flex-wrap">
+            ${buttons.map(btn => `
+                <button id="${btn.id}" class="${UI_CLASSES.button(btn.color)}">
+                    ${btn.icon || ''} ${btn.text}
+                </button>
+            `).join('')}
+        </div>
+    `
+};
+
+// UI Helper Functions - Eliminates duplicate logic
+const UI_HELPERS = {
+    // Standardized error handling
+    handleError: async (context: string, error: any, logError: Function): Promise<void> => {
+        logError(context, `Error: ${error.message || error}`, error);
+    },
+    
+    // Create loading state
+    setLoading: (isLoading: boolean): void => {
+        const loadingIndicator = document.getElementById('loading-indicator');
+        if (loadingIndicator) {
+            loadingIndicator.classList.toggle('hidden', !isLoading);
+        }
+    },
+    
+    // Show/hide modal
+    toggleModal: (modalId: string, show: boolean): void => {
+        const modal = document.getElementById(modalId);
+        if (modal) {
+            modal.classList.toggle('hidden', !show);
+        }
+    }
+};
+
+// Connection Tester Class - Eliminates duplicate connection testing functions
+class ConnectionTester {
+    static async testAllConnections(): Promise<{ ollama: string, stableDiffusion: string }> {
+        const { logInfo, logError } = await import('./logger.js');
+        const results = {
+            ollama: 'unknown' as string,
+            stableDiffusion: 'unknown' as string
+        };
+        
+        try {
+            logInfo('ConnectionTester', 'Testing all connections...');
+            
+            // Test Ollama connection
+            try {
+                const ollamaResult = await this.testOllamaConnection();
+                results.ollama = ollamaResult.status;
+                logInfo('ConnectionTester', `Ollama connection test: ${ollamaResult.status}`);
+            } catch (error: any) {
+                results.ollama = 'error';
+                logError('ConnectionTester', 'Ollama connection test failed', error);
+            }
+            
+            // Test Stable Diffusion connection
+            try {
+                const sdResult = await this.testSDConnection();
+                results.stableDiffusion = sdResult.status;
+                logInfo('ConnectionTester', `SD connection test: ${sdResult.status}`);
+            } catch (error: any) {
+                results.stableDiffusion = 'error';
+                logError('ConnectionTester', 'SD connection test failed', error);
+            }
+            
+            logInfo('ConnectionTester', 'All connection tests completed');
+            return results;
+            
+        } catch (error: any) {
+            logError('ConnectionTester', 'Connection testing failed', error);
+            return results;
+        }
+    }
+    
+    static async testOllamaConnection(): Promise<{ status: string, message?: string }> {
+        try {
+            const { testOllamaConnection } = await import('./ollama.js');
+            const config = await this.getCurrentConfig();
+            const result = await testOllamaConnection(config.ollama.url, config.ollama.model);
+            return { status: result.success ? 'connected' : 'error', message: result.message };
+        } catch (error: any) {
+            return { status: 'error', message: error.message || 'Connection failed' };
+        }
+    }
+    
+    static async testSDConnection(): Promise<{ status: string, message?: string }> {
+        try {
+            const { testSDConnection } = await import('./stable-diffusion.js');
+            const config = await this.getCurrentConfig();
+            const result = await testSDConnection(config.stableDiffusion.url, config.stableDiffusion.model);
+            return { status: result.success ? 'connected' : 'error', message: result.message };
+        } catch (error: any) {
+            return { status: 'error', message: error.message || 'Connection failed' };
+        }
+    }
+    
+    private static async getCurrentConfig(): Promise<any> {
+        const { loadConfig } = await import('./config.js');
+        return await loadConfig();
+    }
+}
+
 // UI State Management
 let uiState: UIState = {
     isLoading: false,
@@ -43,7 +242,7 @@ let errorContainer: HTMLElement;
  * Initialize the game UI
  */
 export async function initializeUI(): Promise<void> {
-    const { logInfo, logError } = await import('./logger.js');
+    const { logInfo, logError, logger } = await import('./logger.js');
     logInfo('UI', 'Initializing game UI...');
     
     // Initialize configuration system first
@@ -53,6 +252,19 @@ export async function initializeUI(): Promise<void> {
     } catch (error) {
         logError('UI', 'Failed to initialize configuration system', error);
         throw error;
+    }
+    
+    // Initialize logger with configuration
+    try {
+        const config = await loadConfig();
+        logger.setConfig({
+            level: config.logging.level,
+            consoleOutput: config.logging.consoleOutput,
+            maxEntries: config.logging.maxEntries
+        });
+        logInfo('UI', 'Logger initialized with configuration');
+    } catch (error) {
+        logError('UI', 'Failed to initialize logger configuration', error);
     }
     
     // Get DOM references
@@ -109,7 +321,6 @@ function createUIElements(): void {
                 <p class="text-white">Generating your adventure...</p>
             </div>
         `;
-        document.body.appendChild(loading);
         loadingIndicator = loading;
     }
     
@@ -130,6 +341,16 @@ function createUIElements(): void {
         overlay.innerHTML = createLoggingConfigHTML();
         document.body.appendChild(overlay);
     }
+    
+    // Ensure logger UI element is connected when logging panel is available
+    setTimeout(() => {
+        const logsDisplay = document.getElementById('logs-display');
+        if (logsDisplay) {
+            import('./logger.js').then(({ logger }) => {
+                logger.setUIElement(logsDisplay);
+            });
+        }
+    }, 100); // Small delay to ensure DOM is ready
 }
 
 /**
@@ -137,84 +358,59 @@ function createUIElements(): void {
  */
 function createLoggingConfigHTML(): string {
     return `
-        <div class="bg-gray-900 border border-gray-700 rounded-lg max-w-2xl w-full max-h-[90vh] overflow-y-auto">
-            <div class="p-6 border-b border-gray-700">
-                <div class="flex justify-between items-center">
-                    <h2 class="text-2xl font-bold text-white">📝 Logging Configuration</h2>
-                    <button id="close-logging-config" class="text-gray-400 hover:text-white text-2xl">&times;</button>
-                </div>
-            </div>
+        <div class="${UI_CLASSES.modal('max-w-2xl', 'max-h-[90vh]')} overflow-y-auto">
+            ${UI_COMPONENTS.modalHeader('📝 Logging Configuration', 'close-logging-config')}
             
             <div class="p-6">
                 <div class="space-y-6">
-                    <div>
-                        <label class="block text-sm font-medium text-gray-300 mb-2">Log Level</label>
-                        <select id="log-level" 
-                                class="w-full bg-gray-800 border border-gray-600 rounded-lg px-4 py-2 text-white">
-                            <option value="error">Error (minimal)</option>
-                            <option value="warn">Warning</option>
-                            <option value="info">Info (default)</option>
-                            <option value="debug">Debug (verbose)</option>
-                        </select>
-                        <div class="text-xs text-gray-400 mt-1">
-                            Controls the verbosity of log messages
-                        </div>
-                    </div>
+                    ${UI_COMPONENTS.selectField(
+                        'Log Level',
+                        'log-level',
+                        [
+                            {value: 'error', label: 'Error (minimal)'},
+                            {value: 'warn', label: 'Warning'},
+                            {value: 'info', label: 'Info (default)'},
+                            {value: 'debug', label: 'Debug (verbose)'}
+                        ],
+                        'Controls the verbosity of log messages'
+                    )}
                     
                     <div>
-                        <label class="block text-sm font-medium text-gray-300 mb-2">Output Settings</label>
+                        <label class="${UI_CLASSES.label}">Output Settings</label>
                         <div class="space-y-2">
                             <label class="flex items-center gap-2 text-sm text-gray-300">
                                 <input type="checkbox" id="log-console" class="rounded" checked>
                                 Console Output
                             </label>
                         </div>
-                        <div class="text-xs text-gray-400 mt-1">
+                        <div class="${UI_CLASSES.helpText}">
                             Show logs in the browser console
                         </div>
                     </div>
                     
-                    <div>
-                        <label class="block text-sm font-medium text-gray-300 mb-2">Max Log Entries</label>
-                        <input type="number" id="log-max-entries" min="100" max="10000" value="1000"
-                               class="w-full bg-gray-800 border border-gray-600 rounded-lg px-4 py-2 text-white">
-                        <div class="text-xs text-gray-400 mt-1">
-                            Maximum number of log entries to keep in memory
-                        </div>
-                    </div>
+                    ${UI_COMPONENTS.formField(
+                        'Max Log Entries',
+                        'number',
+                        'log-max-entries',
+                        'Maximum number of log entries to keep in memory',
+                        undefined,
+                        'min="100" max="10000" value="1000"'
+                    )}
                     
                     <div class="flex items-center gap-4">
-                        <button id="test-logging" 
-                                class="bg-yellow-600 hover:bg-yellow-500 text-white px-4 py-2 rounded-lg">
-                            📝 Test Logging
-                        </button>
-                        <button id="clear-logs" 
-                                class="bg-gray-600 hover:bg-gray-500 text-white px-4 py-2 rounded-lg">
-                            🗑️ Clear Logs
-                        </button>
+                        ${UI_COMPONENTS.button('test-logging', '📝 Test Logging', 'yellow')}
+                        ${UI_COMPONENTS.button('clear-logs', '🗑️ Clear Logs', 'gray')}
                     </div>
                     
                     <div class="pt-4 border-t border-gray-700">
                         <div class="flex justify-between items-center">
                             <div class="flex gap-4">
-                                <button id="discard-logging-changes" 
-                                        class="bg-red-600 hover:bg-red-500 text-white px-4 py-2 rounded-lg flex items-center gap-2">
-                                    <span>✕</span> Discard Changes
-                                </button>
-                                <button id="reset-logging-defaults" 
-                                        class="bg-gray-600 hover:bg-gray-500 text-white px-4 py-2 rounded-lg flex items-center gap-2">
-                                    <span>🔄</span> Reset to Defaults
-                                </button>
+                                ${UI_COMPONENTS.button('discard-logging-changes', '<span>✕</span> Discard Changes', 'red', 'md', 'flex items-center gap-2')}
+                                ${UI_COMPONENTS.button('reset-logging-defaults', '<span>🔄</span> Reset to Defaults', 'gray', 'md', 'flex items-center gap-2')}
                             </div>
                             <div class="flex gap-4">
-                                <button id="cancel-logging-config" 
-                                        class="bg-gray-600 hover:bg-gray-500 text-white px-4 py-2 rounded-lg">
-                                    Cancel
-                                </button>
-                                <button id="save-logging-config" 
-                                        class="bg-indigo-600 hover:bg-indigo-500 text-white px-4 py-2 rounded-lg">
-                                    💾 Save Settings
-                                </button>
+                                ${UI_COMPONENTS.button('cancel-logging-config', 'Cancel', 'gray')}
+                                ${UI_COMPONENTS.button('save-logging-config', '💾 Save Settings', 'indigo')}
                             </div>
                         </div>
                     </div>
@@ -228,153 +424,103 @@ function createLoggingConfigHTML(): string {
  * Create settings modal HTML
  */
 function createSettingsModalHTML(): string {
+    const actionButtons = `
+        <div class="flex gap-2">
+            ${UI_COMPONENTS.button('discard-changes', '<span>✕</span> Discard', 'red', 'sm', 'flex items-center gap-1')}
+            ${UI_COMPONENTS.button('reset-config', '<span>🔄</span> Reset', 'gray', 'sm', 'flex items-center gap-1')}
+        </div>
+    `;
+
+    const tabs = [
+        {id: 'tab-config', label: 'Configuration', icon: '⚙️', isActive: true},
+        {id: 'tab-ollama', label: 'Ollama LLM', icon: '🤖', isActive: false},
+        {id: 'tab-sd', label: 'Stable Diffusion', icon: '🎨', isActive: false}
+    ];
+
     return `
         <div class="flex items-center justify-center min-h-screen p-4">
-            <div class="bg-gray-900 border border-gray-700 rounded-lg max-w-4xl w-full max-h-[95vh] flex flex-col">
-                <div class="p-6 border-b border-gray-700">
-                    <div class="flex justify-between items-center">
-                        <div class="flex items-center gap-4">
-                            <h2 class="text-2xl font-bold text-white">Game Settings</h2>
-                            <div class="flex gap-2">
-                                <button id="discard-changes" 
-                                        class="bg-red-600 hover:bg-red-500 text-white px-3 py-1 rounded text-sm flex items-center gap-1"
-                                        title="Discard changes (revert to last saved)">
-                                    <span>✕</span> Discard
-                                </button>
-                                <button id="reset-config" 
-                                        class="bg-gray-600 hover:bg-gray-500 text-white px-3 py-1 rounded text-sm flex items-center gap-1"
-                                        title="Reset to factory defaults">
-                                    <span>🔄</span> Reset
-                                </button>
-                            </div>
-                        </div>
-                        <div class="flex items-center gap-4">
-                            <button id="close-settings" class="text-gray-400 hover:text-white text-2xl">&times;</button>
-                        </div>
-                    </div>
-                </div>
+            <div class="${UI_CLASSES.modal('max-w-4xl')}">
+                ${UI_COMPONENTS.modalHeader('Game Settings', 'close-settings', true, actionButtons)}
                 
                 <!-- Tab Navigation -->
-                <div class="border-b border-gray-700 mb-6 px-6">
-                    <nav class="flex space-x-8">
-                        <button id="tab-config" class="tab-button active py-2 px-1 border-b-2 border-indigo-500 text-indigo-400 font-medium">
-                            ⚙️ Configuration
-                        </button>
-                        <button id="tab-ollama" class="tab-button py-2 px-1 border-b-2 border-transparent text-gray-400 hover:text-gray-300 font-medium">
-                            🤖 Ollama LLM
-                        </button>
-                        <button id="tab-sd" class="tab-button py-2 px-1 border-b-2 border-transparent text-gray-400 hover:text-gray-300 font-medium">
-                            🎨 Stable Diffusion
-                        </button>
-
-
-                    </nav>
-                </div>
+                ${UI_COMPONENTS.tabNavigation(tabs)}
                 
                 <!-- Tab Content -->
                 <div class="px-6 space-y-8 overflow-y-auto flex-1">
                     <!-- Configuration Management Tab -->
                     <div id="tab-content-config" class="tab-content active">
-                        <div id="config-management" class="p-4 bg-gray-800 rounded-lg border border-gray-600">
+                        <div id="config-management" class="${UI_CLASSES.sectionContainer}">
                             <div class="flex justify-between items-center mb-4">
                                 <h3 class="text-lg font-semibold text-white">Configuration Management</h3>
-                                <button id="save-config-now" 
-                                        class="bg-indigo-600 hover:bg-indigo-500 text-white px-6 py-2 rounded-lg font-semibold flex items-center gap-2">
-                                    💾 Save Configuration Now
-                                </button>
+                                ${UI_COMPONENTS.button('save-config-now', '💾 Save Configuration Now', 'indigo', 'lg', 'font-semibold flex items-center gap-2')}
                             </div>
                             
                             <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
                                 <div>
-                                    <label class="block text-sm font-medium text-gray-300 mb-2">Current Configuration</label>
-                                    <select id="config-selector" 
-                                            class="w-full bg-gray-800 border border-gray-600 rounded-lg px-4 py-2 text-white">
-                                        <option value="default">default</option>
-                                    </select>
+                                    ${UI_COMPONENTS.selectField(
+                                        'Current Configuration',
+                                        'config-selector',
+                                        [{value: 'default', label: 'default'}]
+                                    )}
                                 </div>
                                 <div>
-                                    <label class="block text-sm font-medium text-gray-300 mb-2">Configuration Name</label>
+                                    <label class="${UI_CLASSES.label}">Configuration Name</label>
                                     <div class="flex gap-2">
                                         <input type="text" id="config-name" 
                                                placeholder="Enter config name" 
-                                               class="flex-1 bg-gray-800 border border-gray-600 rounded-lg px-4 py-2 text-white">
-                                        <button id="rename-config" 
-                                                class="bg-blue-600 hover:bg-blue-500 text-white px-4 py-2 rounded-lg">
-                                            Rename
-                                        </button>
+                                               class="${UI_CLASSES.inputFlex}">
+                                        ${UI_COMPONENTS.button('rename-config', 'Rename', 'blue')}
                                     </div>
                                 </div>
                             </div>
                             
-                            <div class="flex gap-2 flex-wrap">
-                                <button id="new-config" 
-                                        class="bg-green-600 hover:bg-green-500 text-white px-4 py-2 rounded-lg">
-                                    ➕ New Config
-                                </button>
-                                <button id="delete-config" 
-                                        class="bg-red-600 hover:bg-red-500 text-white px-4 py-2 rounded-lg">
-                                    🗑️ Delete Config
-                                </button>
-                                <button id="export-config" 
-                                        class="bg-purple-600 hover:bg-purple-500 text-white px-4 py-2 rounded-lg">
-                                    📤 Export
-                                </button>
-                                <button id="import-config" 
-                                        class="bg-orange-600 hover:bg-orange-500 text-white px-4 py-2 rounded-lg">
-                                    📥 Import
-                                </button>
-                            </div>
+                            ${UI_COMPONENTS.buttonGroup([
+                                {id: 'new-config', text: '➕ New Config', color: 'green'},
+                                {id: 'delete-config', text: '🗑️ Delete Config', color: 'red'},
+                                {id: 'export-config', text: '📤 Export', color: 'purple'},
+                                {id: 'import-config', text: '📥 Import', color: 'orange'}
+                            ])}
                             
                             <div class="mt-6 pt-6 border-t border-gray-700">
                                 <h4 class="text-md font-semibold text-gray-300 mb-3">Logging Configuration</h4>
                                 <p class="text-sm text-gray-400 mb-4">Configure logging levels, output settings, and test the logging system.</p>
-                                <div class="flex gap-2">
-                                    <button id="logging-config-button" 
-                                            class="bg-yellow-600 hover:bg-yellow-500 text-white px-4 py-2 rounded-lg">
-                                        ⚙️ Configure Logging
-                                    </button>
-                                    <button id="database-viewer-button" 
-                                            class="bg-purple-600 hover:bg-purple-500 text-white px-4 py-2 rounded-lg">
-                                        🗄️ Database Viewer
-                                    </button>
-                                    <button id="database-config-button" 
-                                            class="bg-blue-600 hover:bg-blue-500 text-white px-4 py-2 rounded-lg">
-                                        ⚙️ Database Config
-                                    </button>
-                                </div>
+                                ${UI_COMPONENTS.buttonGroup([
+                                    {id: 'logging-config-button', text: '⚙️ Configure Logging', color: 'yellow'},
+                                    {id: 'database-viewer-button', text: '🗄️ Database Viewer', color: 'purple'},
+                                    {id: 'database-config-button', text: '⚙️ Database Config', color: 'blue'}
+                                ])}
                             </div>
                             
                             <div id="database-config-section" class="mt-6 pt-6 border-t border-gray-700" style="display: none;">
                                 <h4 class="text-md font-semibold text-gray-300 mb-3">Database Configuration</h4>
                                 <p class="text-sm text-gray-400 mb-4">Configure database settings, backup options, and test the database system.</p>
                                 <div class="space-y-4">
-                                    <div>
-                                        <label class="block text-sm font-medium text-gray-300 mb-2">Database Name</label>
-                                        <input type="text" id="database-name" 
-                                               class="w-full bg-gray-800 border border-gray-600 rounded-lg px-4 py-2 text-white"
-                                               placeholder="AIAdventureDB">
-                                        <div class="text-xs text-gray-400 mt-1">
-                                            Name of the IndexedDB database
-                                        </div>
-                                    </div>
+                                    ${UI_COMPONENTS.formField(
+                                        'Database Name',
+                                        'text',
+                                        'database-name',
+                                        'Name of the IndexedDB database',
+                                        undefined,
+                                        'placeholder="AIAdventureDB"'
+                                    )}
                                     
-                                    <div>
-                                        <label class="block text-sm font-medium text-gray-300 mb-2">Database Version</label>
-                                        <input type="number" id="database-version" min="1" max="10" value="2"
-                                               class="w-full bg-gray-800 border border-gray-600 rounded-lg px-4 py-2 text-white">
-                                        <div class="text-xs text-gray-400 mt-1">
-                                            Current database schema version
-                                        </div>
-                                    </div>
+                                    ${UI_COMPONENTS.formField(
+                                        'Database Version',
+                                        'number',
+                                        'database-version',
+                                        'Current database schema version',
+                                        undefined,
+                                        'min="1" max="10" value="2"'
+                                    )}
                                     
-                                    <div>
-                                        <label class="block text-sm font-medium text-gray-300 mb-2">Max Entries</label>
-                                        <input type="number" id="database-max-entries" min="100" max="100000" value="10000"
-                                               class="w-full bg-gray-800 border border-gray-600 rounded-lg px-4 py-2 text-white">
-                                        <div class="text-xs text-gray-400 mt-1">
-                                            Maximum number of entries to keep in memory
-                                        </div>
-                                    </div>
+                                    ${UI_COMPONENTS.formField(
+                                        'Max Entries',
+                                        'number',
+                                        'database-max-entries',
+                                        'Maximum number of entries to keep in memory',
+                                        undefined,
+                                        'min="100" max="100000" value="10000"'
+                                    )}
                                     
                                     <div class="flex items-center">
                                         <input type="checkbox" id="database-auto-backup" 
@@ -384,25 +530,20 @@ function createSettingsModalHTML(): string {
                                         </label>
                                     </div>
                                     
-                                    <div>
-                                        <label class="block text-sm font-medium text-gray-300 mb-2">Backup Interval (minutes)</label>
-                                        <input type="number" id="database-backup-interval" min="5" max="1440" value="60"
-                                               class="w-full bg-gray-800 border border-gray-600 rounded-lg px-4 py-2 text-white">
-                                        <div class="text-xs text-gray-400 mt-1">
-                                            How often to automatically backup database (5-1440 minutes)
-                                        </div>
-                                    </div>
+                                    ${UI_COMPONENTS.formField(
+                                        'Backup Interval (minutes)',
+                                        'number',
+                                        'database-backup-interval',
+                                        'How often to automatically backup database (5-1440 minutes)',
+                                        undefined,
+                                        'min="5" max="1440" value="60"'
+                                    )}
                                     
-                                    <div class="flex gap-2">
-                                        <button id="test-database" 
-                                                class="bg-purple-600 hover:bg-purple-500 text-white px-4 py-2 rounded-lg">
-                                            🗄️ Test Database
-                                        </button>
-                                        <button id="backup-database" 
-                                                class="bg-green-600 hover:bg-green-500 text-white px-4 py-2 rounded-lg">
-                                            💾 Backup Now
-                                        </button>
-                                    </div>
+                                    ${UI_COMPONENTS.buttonGroup([
+                                        {id: 'test-database', text: '🗄️ Test Database', color: 'purple'},
+                                        {id: 'backup-database', text: '💾 Backup Now', color: 'green'}
+                                    ])}
+                                    
                                     <div id="database-status" class="flex items-center gap-2">
                                         <div id="database-status-indicator" class="w-3 h-3 rounded-full bg-gray-500"></div>
                                         <span id="database-status-text" class="text-sm text-gray-400">Not tested</span>
@@ -414,53 +555,57 @@ function createSettingsModalHTML(): string {
                     
                     <!-- Ollama Settings Tab -->
                     <div id="tab-content-ollama" class="tab-content hidden">
-                        <div id="ollama-settings" class="p-4 bg-gray-800 rounded-lg border border-gray-600">
+                        <div id="ollama-settings" class="${UI_CLASSES.sectionContainer}">
                             <h3 class="text-lg font-semibold text-indigo-400 mb-4">Ollama LLM Settings</h3>
-                        <div class="space-y-4">
-                            <div>
-                                <label class="block text-sm font-medium text-gray-300 mb-2">Ollama URL</label>
-                                <input type="url" id="ollama-url" 
-                                       class="w-full bg-gray-800 border border-gray-600 rounded-lg px-4 py-2 text-white"
-                                       placeholder="http://localhost:11434">
-                            </div>
-                            
-                            <div>
-                                <label class="block text-sm font-medium text-gray-300 mb-2">Model</label>
-                                <select id="ollama-model" 
-                                        class="w-full bg-gray-800 border border-gray-600 rounded-lg px-4 py-2 text-white">
-                                    <option value="">Loading models...</option>
-                                </select>
-                                <button id="refresh-ollama-models" 
-                                        class="text-xs text-indigo-400 hover:text-indigo-300 mt-1">
-                                    🔄 Refresh Models
-                                </button>
-                            </div>
+                            <div class="space-y-4">
+                                ${UI_COMPONENTS.formField(
+                                    'Ollama URL',
+                                    'url',
+                                    'ollama-url',
+                                    undefined,
+                                    undefined,
+                                    'placeholder="http://localhost:11434"'
+                                )}
+                                
+                                <div>
+                                    ${UI_COMPONENTS.selectField(
+                                        'Model',
+                                        'ollama-model',
+                                        [{value: '', label: 'Loading models...'}]
+                                    )}
+                                    <button id="refresh-ollama-models" 
+                                            class="text-xs text-indigo-400 hover:text-indigo-300 mt-1">
+                                        🔄 Refresh Models
+                                    </button>
+                                </div>
                             
                             <div class="grid grid-cols-3 gap-4">
                                 <div>
-                                    <label class="block text-sm font-medium text-gray-300 mb-2">Temperature</label>
+                                    <label class="${UI_CLASSES.label}">Temperature</label>
                                     <input type="range" id="llm-temperature" min="0" max="2" step="0.1" value="0.8"
                                            class="w-full">
                                     <span id="temp-value" class="text-xs text-gray-400">0.8</span>
                                 </div>
                                 <div>
-                                    <label class="block text-sm font-medium text-gray-300 mb-2">Top P</label>
+                                    <label class="${UI_CLASSES.label}">Top P</label>
                                     <input type="range" id="llm-top-p" min="0" max="1" step="0.1" value="0.9"
                                            class="w-full">
                                     <span id="top-p-value" class="text-xs text-gray-400">0.9</span>
                                 </div>
                                 <div>
-                                    <label class="block text-sm font-medium text-gray-300 mb-2">Max Tokens</label>
-                                    <input type="number" id="llm-max-tokens" min="1" max="4096" value="1000"
-                                           class="w-full bg-gray-800 border border-gray-600 rounded-lg px-2 py-1 text-white">
+                                    ${UI_COMPONENTS.formField(
+                                        'Max Tokens',
+                                        'number',
+                                        'llm-max-tokens',
+                                        undefined,
+                                        UI_CLASSES.inputSmall,
+                                        'min="1" max="4096" value="1000"'
+                                    )}
                                 </div>
                             </div>
                             
                             <div class="flex items-center gap-6">
-                                <button id="test-ollama" 
-                                        class="bg-blue-600 hover:bg-blue-500 text-white px-4 py-2 rounded-lg">
-                                    🔌 Test Connection
-                                </button>
+                                ${UI_COMPONENTS.button('test-ollama', '🔌 Test Connection', 'blue')}
                                 <div id="ollama-status" class="flex items-center gap-2">
                                     <div id="ollama-status-indicator" class="w-3 h-3 rounded-full bg-gray-500"></div>
                                     <span id="ollama-status-text" class="text-sm text-gray-400">Not tested</span>
@@ -473,47 +618,48 @@ function createSettingsModalHTML(): string {
                     
                     <!-- Stable Diffusion Settings Tab -->
                     <div id="tab-content-sd" class="tab-content hidden">
-                        <div id="sd-settings" class="p-4 bg-gray-800 rounded-lg border border-gray-600">
+                        <div id="sd-settings" class="${UI_CLASSES.sectionContainer}">
                             <h3 class="text-lg font-semibold text-green-400 mb-4">Stable Diffusion Settings</h3>
-                        <div class="space-y-4">
-                            <div>
-                                <label class="block text-sm font-medium text-gray-300 mb-2">SD URL</label>
-                                <input type="url" id="sd-url" 
-                                       class="w-full bg-gray-800 border border-gray-600 rounded-lg px-4 py-2 text-white"
-                                       placeholder="http://127.0.0.1:7860">
-                            </div>
-                            
-                            <div>
-                                <label class="block text-sm font-medium text-gray-300 mb-2">Base Path</label>
-                                <input type="text" id="sd-base-path" 
-                                       class="w-full bg-gray-800 border border-gray-600 rounded-lg px-4 py-2 text-white"
-                                       placeholder="C:\\AI\\stable-diffusion-webui-1.10.1">
-                                <div class="text-xs text-gray-400 mt-1">
-                                    Path to your Stable Diffusion WebUI installation directory
+                            <div class="space-y-4">
+                                ${UI_COMPONENTS.formField(
+                                    'SD URL',
+                                    'url',
+                                    'sd-url',
+                                    undefined,
+                                    undefined,
+                                    'placeholder="http://127.0.0.1:7860"'
+                                )}
+                                
+                                ${UI_COMPONENTS.formField(
+                                    'Base Path',
+                                    'text',
+                                    'sd-base-path',
+                                    'Path to your Stable Diffusion WebUI installation directory',
+                                    undefined,
+                                    'placeholder="C:\\\\AI\\\\stable-diffusion-webui-1.10.1"'
+                                )}
+                                
+                                <div>
+                                    ${UI_COMPONENTS.selectField(
+                                        'Model',
+                                        'sd-model',
+                                        [{value: '', label: 'Loading models...'}]
+                                    )}
+                                    <button id="refresh-sd-models" 
+                                            class="text-xs text-green-400 hover:text-green-300 mt-1">
+                                        🔄 Refresh Models
+                                    </button>
                                 </div>
-                            </div>
-                            
-                            <div>
-                                <label class="block text-sm font-medium text-gray-300 mb-2">Model</label>
-                                <select id="sd-model" 
-                                        class="w-full bg-gray-800 border border-gray-600 rounded-lg px-4 py-2 text-white">
-                                    <option value="">Loading models...</option>
-                                </select>
-                                <button id="refresh-sd-models" 
-                                        class="text-xs text-green-400 hover:text-green-300 mt-1">
-                                    🔄 Refresh Models
-                                </button>
-                            </div>
-                            
-                            <div>
-                                <label class="block text-sm font-medium text-gray-300 mb-2">Face Restoration</label>
-                                <select id="sd-face-restoration" 
-                                        class="w-full bg-gray-800 border border-gray-600 rounded-lg px-4 py-2 text-white">
-                                    <option value="auto">Auto (detect if available)</option>
-                                    <option value="always">Always (when available)</option>
-                                    <option value="never">Never (standard generation)</option>
-                                </select>
-                            </div>
+                                
+                                ${UI_COMPONENTS.selectField(
+                                    'Face Restoration',
+                                    'sd-face-restoration',
+                                    [
+                                        {value: 'auto', label: 'Auto (detect if available)'},
+                                        {value: 'always', label: 'Always (when available)'},
+                                        {value: 'never', label: 'Never (standard generation)'}
+                                    ]
+                                )}
                             
                             <div class="border border-gray-600 rounded-lg">
                                 <button type="button" 
@@ -2174,18 +2320,22 @@ async function saveLoggingConfig(): Promise<void> {
         if (logConsole !== undefined) config.logging.consoleOutput = logConsole;
         if (logMaxEntries) config.logging.maxEntries = parseInt(logMaxEntries);
         
-        // Update logger configuration
-        import('./logger.js').then(({ logger }) => {
-            logger.setConfig({
-                level: config.logging.level,
-                consoleOutput: config.logging.consoleOutput,
-                maxEntries: config.logging.maxEntries
-            });
+        // Update logger configuration immediately
+        const { logger } = await import('./logger.js');
+        logger.setConfig({
+            level: config.logging.level,
+            consoleOutput: config.logging.consoleOutput,
+            maxEntries: config.logging.maxEntries
         });
         
+        // Save configuration
         await saveConfig(config);
+        
+        // Update UI to reflect changes
+        await loadLoggingSettingsIntoOverlay();
+        
         hideLoggingConfigOverlay();
-        showMessage('Logging configuration saved!', 'success');
+        showMessage('Logging configuration saved and applied!', 'success');
     } catch (error) {
         showMessage(`Failed to save logging configuration: ${error}`, 'error');
     }
@@ -2203,20 +2353,21 @@ async function resetLoggingToDefaults(): Promise<void> {
         config.logging.consoleOutput = true;
         config.logging.maxEntries = 1000;
         
-        // Update logger configuration
-        import('./logger.js').then(({ logger }) => {
-            logger.setConfig({
-                level: config.logging.level,
-                consoleOutput: config.logging.consoleOutput,
-                maxEntries: config.logging.maxEntries
-            });
+        // Update logger configuration immediately
+        const { logger } = await import('./logger.js');
+        logger.setConfig({
+            level: config.logging.level,
+            consoleOutput: config.logging.consoleOutput,
+            maxEntries: config.logging.maxEntries
         });
         
         // Update UI to reflect defaults
         await loadLoggingSettingsIntoOverlay();
         
+        // Save configuration
         await saveConfig(config);
-        showMessage('Logging configuration reset to defaults!', 'success');
+        
+        showMessage('Logging configuration reset to defaults and applied!', 'success');
     } catch (error) {
         showMessage(`Failed to reset logging configuration: ${error}`, 'error');
     }
@@ -2706,9 +2857,11 @@ function showGameScreen(): void {
             if (loggingPanel) {
                 loggingPanel.classList.toggle('hidden');
                 if (!loggingPanel.classList.contains('hidden')) {
-                    // Connect logger to UI element
+                    // Connect logger to UI element and ensure it's always connected
                     import('./logger.js').then(({ logger }) => {
                         logger.setUIElement(logsDisplay);
+                        // Refresh the display to show current logs
+                        logger.getEntries(); // This will trigger updateUI
                     });
                 }
             }

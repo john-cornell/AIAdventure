@@ -48,7 +48,12 @@ Respond with ONLY a JSON object containing:
   "new_memories": []
 }
 
-IMPORTANT: Provide at least 2 choices (prefer 4). Show the user's action happening in the story. NO OTHER TEXT. JUST THE JSON.`;
+IMPORTANT: 
+- Provide at least 2 choices (prefer 4). 
+- Show the user's action happening in the story. 
+- 🚨 NEVER use character names in choices unless they have been explicitly introduced in the story
+- 🚨 If a character hasn't been named yet, refer to them by their role/description (e.g., "the merchant", "the guard")
+- NO OTHER TEXT. JUST THE JSON.`;
 
 // System prompt for the game
 const systemPrompt = `You are an expert storyteller creating an interactive adventure game. 
@@ -107,6 +112,9 @@ CHOICE GUIDELINES:
 - Choices should be specific and actionable
 - Avoid repetitive or similar choices
 - If you can only think of 2-3 choices, that's acceptable, but 4 is strongly preferred
+- 🚨 CRITICAL: NEVER use character names in choices unless they have been explicitly introduced in the story
+- 🚨 CRITICAL: If a character hasn't been named or introduced yet, refer to them by their role/description (e.g., "the merchant", "the guard", "the old woman")
+- 🚨 CRITICAL: Only use names for characters that the player has actually met and learned the name of through story interaction
 
 MEMORY GUIDELINES:
 - Only create memories for SALIENT STORY POINTS that matter for narrative continuity
@@ -139,7 +147,8 @@ User: "I search the room"
 - The user's command drives the story forward
 - ALWAYS show the user's action happening in the story
 - STRONGLY PREFERRED: Provide 4 choices, but minimum 2 choices required
-- Make the story respond directly to what the user wants to do`;
+- Make the story respond directly to what the user wants to do
+- 🚨 NEVER use character names in choices unless they have been explicitly introduced in the story`;
 
 // Context management settings
 const CONTEXT_WARNING_THRESHOLD = 0.8; // 80% of context limit
