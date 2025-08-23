@@ -417,17 +417,20 @@ export async function getGameSessionData(sessionId: string): Promise<{
 export async function getAllDatabaseData(): Promise<{
     configs: ConfigRecord[];
     storySummaries: StorySummaryRecord[];
+    storySteps: StoryStepRecord[];
 }> {
     try {
         const database = getDatabase();
         const configs = await database.configs.toArray();
         const storySummaries = await database.storySummaries.toArray();
+        const storySteps = await database.storySteps.toArray();
         
-        logInfo('Database', `Retrieved all database data: ${configs.length} configs, ${storySummaries.length} story summaries`);
+        logInfo('Database', `Retrieved all database data: ${configs.length} configs, ${storySummaries.length} story summaries, ${storySteps.length} story steps`);
         
         return {
             configs,
-            storySummaries
+            storySummaries,
+            storySteps
         };
     } catch (error) {
         logError('Database', 'Failed to get all database data', error);

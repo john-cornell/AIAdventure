@@ -613,6 +613,134 @@ function createSettingsModalHTML(): string {
 }
 
 /**
+ * Create story management overlay HTML
+ */
+function createStoryManagementOverlayHTML(): string {
+    return `
+        <div class="flex items-center justify-center min-h-screen p-4">
+            <div class="bg-gray-900 border border-gray-700 rounded-lg max-w-6xl w-full max-h-[95vh] flex flex-col">
+                <div class="p-6 border-b border-gray-700">
+                    <div class="flex justify-between items-center">
+                        <h2 class="text-2xl font-bold text-white">Story Management</h2>
+                        <button id="close-story-management-overlay" class="text-gray-400 hover:text-white text-2xl">&times;</button>
+                    </div>
+                </div>
+                
+                <!-- Tab Navigation -->
+                <div class="border-b border-gray-700 mb-6 px-6">
+                    <nav class="flex space-x-8">
+                        <button id="story-tab-management" class="story-tab-button active py-2 px-1 border-b-2 border-indigo-500 text-indigo-400 font-medium">
+                            📚 Story Management
+                        </button>
+                        <button id="story-tab-summary" class="story-tab-button py-2 px-1 border-b-2 border-transparent text-gray-400 hover:text-gray-300 font-medium">
+                            📝 Story Summary
+                        </button>
+                    </nav>
+                </div>
+                
+                <!-- Tab Content -->
+                <div class="px-6 space-y-8 overflow-y-auto flex-1">
+                    <!-- Story Management Tab -->
+                    <div id="story-tab-content-management" class="story-tab-content active">
+                        <div class="p-4 bg-gray-800 rounded-lg border border-gray-600">
+                            <div class="flex justify-between items-center mb-4">
+                                <h3 class="text-lg font-semibold text-white">Story Management</h3>
+                            </div>
+                            
+                            <!-- Session Selector -->
+                            <div class="mb-4">
+                                <label class="block text-sm font-medium text-gray-300 mb-2">Select Session:</label>
+                                <select id="story-session-selector" class="w-full bg-gray-700 border border-gray-600 rounded-lg px-3 py-2 text-white">
+                                    <option value="">Loading sessions...</option>
+                                </select>
+                            </div>
+                            
+                            <!-- Action Buttons -->
+                            <div class="mb-4 flex gap-2 flex-wrap">
+                                <button id="load-story-from-session" class="bg-green-600 hover:bg-green-500 text-white px-4 py-2 rounded-lg">
+                                    🎮 Load Story
+                                </button>
+                                <button id="delete-session-data" class="bg-red-600 hover:bg-red-500 text-white px-4 py-2 rounded-lg">
+                                    🗑️ Delete Session Data
+                                </button>
+                            </div>
+                            
+                            <!-- Summary and Steps Display -->
+                            <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                                <!-- Summary Section -->
+                                <div class="bg-gray-900 rounded-lg border border-gray-600 p-4">
+                                    <h4 class="text-md font-semibold text-white mb-3 flex items-center justify-between">
+                                        <span>📋 Story Summary</span>
+                                        <button id="delete-summary" class="bg-red-600 hover:bg-red-500 text-white px-2 py-1 rounded text-xs">
+                                            🗑️ Delete
+                                        </button>
+                                    </h4>
+                                    <div id="story-summary-container" class="text-sm text-gray-300 max-h-64 overflow-y-auto">
+                                        <span class="text-gray-500">Select a session to view summary...</span>
+                                    </div>
+                                </div>
+                                
+                                <!-- Steps Section -->
+                                <div class="bg-gray-900 rounded-lg border border-gray-600 p-4">
+                                    <h4 class="text-md font-semibold text-white mb-3 flex items-center justify-between">
+                                        <span>📝 Story Steps</span>
+                                        <button id="delete-steps" class="bg-red-600 hover:bg-red-500 text-white px-2 py-1 rounded text-xs">
+                                            🗑️ Delete
+                                        </button>
+                                    </h4>
+                                    <div id="story-steps-container" class="text-sm text-gray-300 max-h-64 overflow-y-auto">
+                                        <span class="text-gray-500">Select a session to view steps...</span>
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            <!-- Session Info -->
+                            <div id="session-info" class="mt-4 p-3 bg-gray-700 rounded-lg border border-gray-600 hidden">
+                                <h4 class="text-md font-semibold text-white mb-2">Session Information</h4>
+                                <div id="session-details" class="text-sm text-gray-300"></div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Story Summary Tab -->
+                    <div id="story-tab-content-summary" class="story-tab-content hidden">
+                        <div class="p-4 bg-gray-800 rounded-lg border border-gray-600">
+                            <div class="flex justify-between items-center mb-4">
+                                <h3 class="text-lg font-semibold text-white">Story Summaries</h3>
+                                <div class="flex gap-2">
+                                    <button id="import-story-summary" class="bg-green-600 hover:bg-green-500 text-white px-4 py-2 rounded-lg">
+                                        📁 Import Story
+                                    </button>
+                                </div>
+                            </div>
+                            
+                            <div id="story-summary-display" class="text-sm text-gray-300 font-mono bg-gray-900 p-4 rounded border border-gray-600 max-h-96 overflow-y-auto">
+                                Loading story summaries...
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Footer -->
+                <div class="p-6 border-t border-gray-700">
+                    <div class="flex justify-between items-center">
+                        <div class="text-sm text-gray-400">
+                            <span id="story-management-status">Ready</span>
+                        </div>
+                        <div class="flex gap-2">
+                            <button id="refresh-story-data" 
+                                    class="bg-blue-600 hover:bg-blue-500 text-white px-4 py-2 rounded-lg">
+                                🔄 Refresh Data
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    `;
+}
+
+/**
  * Create database overlay HTML
  */
 function createDatabaseOverlayHTML(): string {
@@ -689,18 +817,15 @@ function createDatabaseOverlayHTML(): string {
                             <!-- Session Selector -->
                             <div class="mb-4">
                                 <label class="block text-sm font-medium text-gray-300 mb-2">Select Session:</label>
-                                <select id="story-session-selector" class="w-full bg-gray-700 border border-gray-600 rounded-lg px-3 py-2 text-white">
+                                <select id="story-session-selector-db" class="w-full bg-gray-700 border border-gray-600 rounded-lg px-3 py-2 text-white">
                                     <option value="">Loading sessions...</option>
                                 </select>
                             </div>
                             
                             <!-- Action Buttons -->
                             <div class="mb-4 flex gap-2 flex-wrap">
-                                <button id="load-game" class="bg-green-600 hover:bg-green-500 text-white px-4 py-2 rounded-lg">
-                                    🎮 Load Game
-                                </button>
-                                <button id="view-summary-and-steps" class="bg-blue-600 hover:bg-blue-500 text-white px-4 py-2 rounded-lg">
-                                    📖 View Summary & Steps
+                                <button id="load-story-from-session-db" class="bg-green-600 hover:bg-green-500 text-white px-4 py-2 rounded-lg">
+                                    🎮 Load Story
                                 </button>
                                 <button id="delete-session-data" class="bg-red-600 hover:bg-red-500 text-white px-4 py-2 rounded-lg">
                                     🗑️ Delete Session Data
@@ -713,11 +838,11 @@ function createDatabaseOverlayHTML(): string {
                                 <div class="bg-gray-900 rounded-lg border border-gray-600 p-4">
                                     <h4 class="text-md font-semibold text-white mb-3 flex items-center justify-between">
                                         <span>📋 Story Summary</span>
-                                        <button id="delete-summary" class="bg-red-600 hover:bg-red-500 text-white px-2 py-1 rounded text-xs">
+                                        <button id="delete-summary-db" class="bg-red-600 hover:bg-red-500 text-white px-2 py-1 rounded text-xs">
                                             🗑️ Delete
                                         </button>
                                     </h4>
-                                    <div id="story-summary-container" class="text-sm text-gray-300 max-h-64 overflow-y-auto">
+                                    <div id="story-summary-container-db" class="text-sm text-gray-300 max-h-64 overflow-y-auto">
                                         <span class="text-gray-500">Select a session to view summary...</span>
                                     </div>
                                 </div>
@@ -726,11 +851,11 @@ function createDatabaseOverlayHTML(): string {
                                 <div class="bg-gray-900 rounded-lg border border-gray-600 p-4">
                                     <h4 class="text-md font-semibold text-white mb-3 flex items-center justify-between">
                                         <span>📝 Story Steps</span>
-                                        <button id="delete-steps" class="bg-red-600 hover:bg-red-500 text-white px-2 py-1 rounded text-xs">
+                                        <button id="delete-steps-db" class="bg-red-600 hover:bg-red-500 text-white px-2 py-1 rounded text-xs">
                                             🗑️ Delete
                                         </button>
                                     </h4>
-                                    <div id="story-steps-container" class="text-sm text-gray-300 max-h-64 overflow-y-auto">
+                                    <div id="story-steps-container-db" class="text-sm text-gray-300 max-h-64 overflow-y-auto">
                                         <span class="text-gray-500">Select a session to view steps...</span>
                                     </div>
                                 </div>
@@ -2343,11 +2468,9 @@ function showMenuScreen(): void {
                     ⚙️ Settings
                 </button>
                 
-                
-                
-                <button id="import-button" 
+                <button id="story-management-button" 
                         class="bg-green-600 hover:bg-green-500 text-white font-bold py-3 px-8 rounded-lg text-lg transition-colors duration-300">
-                    📁 Import Adventure
+                    📚 Story Management
                 </button>
             </div>
             
@@ -2363,6 +2486,7 @@ function showMenuScreen(): void {
                         <span class="text-gray-300">Stable Diffusion</span>
                     </div>
                 </div>
+
             </div>
         </div>
     `;
@@ -2381,51 +2505,11 @@ function showMenuScreen(): void {
         });
     }
     
-    // Add import button event listener
-    const importBtn = document.getElementById('import-button');
-    if (importBtn) {
-        importBtn.addEventListener('click', () => {
-            // Create a hidden file input
-            const fileInput = document.createElement('input');
-            fileInput.type = 'file';
-            fileInput.accept = '.json,application/json';
-            fileInput.style.display = 'none';
-            
-            fileInput.addEventListener('change', (event) => {
-                const target = event.target as HTMLInputElement;
-                const file = target.files?.[0];
-                if (!file) return;
-                
-                if (!file.name.endsWith('.json') && file.type !== 'application/json') {
-                    showMessage('Invalid file type. Please select a .json adventure file.', 'error');
-                    return;
-                }
-                
-                const reader = new FileReader();
-                reader.onload = (e) => {
-                    try {
-                        const data = JSON.parse(e.target?.result as string);
-                        if (data.messageHistory && data.storyLog) {
-                            importGame(data);
-                        } else {
-                            throw new Error('Invalid adventure file format. Required data is missing.');
-                        }
-                    } catch (error) {
-                        console.error('Error parsing adventure file:', error);
-                        showMessage('Could not read the adventure file. It might be corrupted or in the wrong format.', 'error');
-                    }
-                };
-                
-                reader.onerror = () => {
-                    showMessage('There was an error reading the selected file.', 'error');
-                };
-                
-                reader.readAsText(file);
-            });
-            
-            document.body.appendChild(fileInput);
-            fileInput.click();
-            document.body.removeChild(fileInput);
+    // Add story management button event listener
+    const storyManagementBtn = document.getElementById('story-management-button');
+    if (storyManagementBtn) {
+        storyManagementBtn.addEventListener('click', () => {
+            showStoryManagementOverlay();
         });
     }
 }
@@ -3062,6 +3146,608 @@ export function updateUIState(newState: Partial<UIState>): void {
 }
 
 /**
+ * Story Management Overlay Functions
+ */
+
+/**
+ * Show story management overlay
+ */
+function showStoryManagementOverlay(): void {
+    const overlay = document.createElement('div');
+    overlay.id = 'story-management-overlay';
+    overlay.className = 'fixed inset-0 bg-black/50 z-50';
+    overlay.innerHTML = createStoryManagementOverlayHTML();
+    
+    document.body.appendChild(overlay);
+    
+    // Setup event listeners after DOM is rendered
+    setTimeout(() => {
+        setupStoryManagementOverlayEventListeners();
+    }, 100);
+    
+    // Load initial data
+    loadStoryManagementData();
+}
+
+/**
+ * Hide story management overlay
+ */
+function hideStoryManagementOverlay(): void {
+    const overlay = document.getElementById('story-management-overlay');
+    if (overlay) {
+        overlay.remove();
+    }
+}
+
+/**
+ * Switch story management overlay tabs
+ */
+function switchStoryManagementTab(tabId: string): void {
+    // Hide all tab contents
+    const tabContents = document.querySelectorAll('.story-tab-content');
+    tabContents.forEach(content => {
+        content.classList.add('hidden');
+        content.classList.remove('active');
+    });
+    
+    // Remove active class from all tab buttons
+    const tabButtons = document.querySelectorAll('.story-tab-button');
+    tabButtons.forEach(button => {
+        button.classList.remove('active', 'border-indigo-500', 'text-indigo-400');
+        button.classList.add('border-transparent', 'text-gray-400');
+    });
+    
+    // Show selected tab content
+    const tabName = tabId.replace('story-tab-', '');
+    const targetContent = document.getElementById(`story-tab-content-${tabName}`);
+    if (targetContent) {
+        targetContent.classList.remove('hidden');
+        targetContent.classList.add('active');
+    }
+    
+    // Activate selected tab button
+    const targetButton = document.getElementById(tabId);
+    if (targetButton) {
+        targetButton.classList.add('active', 'border-indigo-500', 'text-indigo-400');
+        targetButton.classList.remove('border-transparent', 'text-gray-400');
+    }
+}
+
+/**
+ * Load story management data
+ */
+async function loadStoryManagementData(): Promise<void> {
+    try {
+        console.log('loadStoryManagementData: Starting...');
+        const statusElement = document.getElementById('story-management-status');
+        if (statusElement) {
+            statusElement.textContent = 'Loading...';
+        }
+        
+        console.log('loadStoryManagementData: Calling getAllDatabaseData...');
+        const allData = await getAllDatabaseData();
+        console.log('loadStoryManagementData: Received data:', allData);
+        
+        // Update story management tab
+        updateStoryManagementTab(allData);
+        
+        // Update story summary tab
+        updateStorySummaryTab(allData);
+        
+        // Update status
+        if (statusElement) {
+            statusElement.textContent = 'Ready';
+        }
+        
+    } catch (error) {
+        console.error('Failed to load story management data:', error);
+        showMessage('Failed to load story management data', 'error');
+        
+        const statusElement = document.getElementById('story-management-status');
+        if (statusElement) {
+            statusElement.textContent = 'Error';
+        }
+    }
+}
+
+/**
+ * Update story management tab
+ */
+function updateStoryManagementTab(allData: any): void {
+    console.log('updateStoryManagementTab called with data:', allData);
+    console.log('Data type check:', typeof allData, Array.isArray(allData));
+    console.log('storySummaries type:', typeof allData.storySummaries, Array.isArray(allData.storySummaries));
+    console.log('storySummaries length:', allData.storySummaries?.length);
+    console.log('storySummaries content:', allData.storySummaries);
+    
+    // Populate session selector
+    const sessionSelector = document.getElementById('story-session-selector');
+    if (sessionSelector) {
+        console.log('Session selector found, storySummaries:', allData.storySummaries);
+        
+        if (allData.storySummaries && allData.storySummaries.length > 0) {
+            console.log('Processing story summaries...');
+            
+            // Group summaries by session and get the most recent one for each
+            const sessionMap = new Map();
+            allData.storySummaries.forEach((summary: any, index: number) => {
+                console.log(`Processing summary ${index}:`, summary);
+                if (!sessionMap.has(summary.session_id) || 
+                    new Date(summary.updated_at) > new Date(sessionMap.get(summary.session_id).updated_at)) {
+                    sessionMap.set(summary.session_id, summary);
+                }
+            });
+            
+            const uniqueSessions = Array.from(sessionMap.values()).sort((a: any, b: any) => 
+                new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime()
+            );
+            
+            console.log('Unique sessions found:', uniqueSessions.length);
+            console.log('Unique sessions:', uniqueSessions);
+            
+            const optionsHTML = uniqueSessions.map((summary: any) => {
+                const date = new Date(summary.updated_at).toLocaleDateString();
+                const time = new Date(summary.updated_at).toLocaleTimeString();
+                const stepCount = summary.step_count || 0;
+                return `<option value="${summary.session_id}">${date} ${time} (${stepCount} steps)</option>`;
+            }).join('');
+            
+            console.log('Generated options HTML:', optionsHTML);
+            
+            const finalHTML = '<option value="">Select a session...</option>' + optionsHTML;
+            console.log('Final HTML to insert:', finalHTML);
+            sessionSelector.innerHTML = finalHTML;
+            console.log('Session selector updated successfully');
+            console.log('Session selector innerHTML after update:', sessionSelector.innerHTML);
+            console.log('Session selector value after update:', (sessionSelector as HTMLSelectElement).value);
+            console.log('Session selector options length after update:', (sessionSelector as HTMLSelectElement).options.length);
+            
+            // Auto-select and load the first session
+            if (uniqueSessions.length > 0) {
+                const firstSessionId = uniqueSessions[0].session_id;
+                console.log('Auto-selecting first session:', firstSessionId);
+                (sessionSelector as HTMLSelectElement).value = firstSessionId;
+                
+                // Trigger the change event to auto-load the data
+                setTimeout(() => {
+                    console.log('Auto-loading first session data...');
+                    loadSessionData(firstSessionId);
+                }, 200);
+            }
+            
+            // Check if something overwrites our update
+            setTimeout(() => {
+                console.log('Session selector innerHTML after 100ms delay:', sessionSelector.innerHTML);
+                console.log('Session selector options length after 100ms delay:', (sessionSelector as HTMLSelectElement).options.length);
+            }, 100);
+        } else {
+            console.log('No story summaries found - condition failed');
+            console.log('allData.storySummaries exists:', !!allData.storySummaries);
+            console.log('allData.storySummaries length:', allData.storySummaries?.length);
+            sessionSelector.innerHTML = '<option value="">No sessions available</option>';
+        }
+    } else {
+        console.log('Session selector not found');
+    }
+}
+
+/**
+ * Update story summary tab
+ */
+function updateStorySummaryTab(allData: any): void {
+    const summaryContainer = document.getElementById('story-summary-display');
+    if (summaryContainer) {
+        if (allData.storySummaries.length === 0) {
+            summaryContainer.innerHTML = '<span class="text-gray-500">No story summaries found</span>';
+        } else {
+            summaryContainer.innerHTML = formatSummaryData(allData.storySummaries, true);
+        }
+    }
+}
+
+/**
+ * Setup story management overlay event listeners
+ */
+function setupStoryManagementOverlayEventListeners(): void {
+    console.log('🔧 setupStoryManagementOverlayEventListeners called');
+    console.log('🔧 Current time:', new Date().toLocaleTimeString());
+    // Close button
+    const closeBtn = document.getElementById('close-story-management-overlay');
+    if (closeBtn) {
+        closeBtn.addEventListener('click', hideStoryManagementOverlay);
+    }
+    
+    // Tab switching
+    const tabButtons = document.querySelectorAll('.story-tab-button');
+    tabButtons.forEach(button => {
+        button.addEventListener('click', () => {
+            const tabId = button.id;
+            switchStoryManagementTab(tabId);
+        });
+    });
+    
+    // Session selector change - automatically load session data when selected
+    const sessionSelector = document.getElementById('story-session-selector');
+    if (sessionSelector) {
+        console.log('Session selector found, adding change event listener');
+        sessionSelector.addEventListener('change', (e) => {
+            const target = e.target as HTMLSelectElement;
+            const sessionId = target.value;
+            console.log('Session selector changed to:', sessionId);
+            if (sessionId) {
+                console.log('Auto-loading session data...');
+                loadSessionData(sessionId);
+            } else {
+                console.log('No session selected, clearing displays');
+                // Clear displays when no session is selected
+                const summaryContainer = document.getElementById('story-summary-container');
+                const stepsContainer = document.getElementById('story-steps-container');
+                if (summaryContainer) summaryContainer.innerHTML = '<span class="text-gray-500">Select a session to view summary...</span>';
+                if (stepsContainer) stepsContainer.innerHTML = '<span class="text-gray-500">Select a session to view steps...</span>';
+            }
+        });
+    } else {
+        console.log('Session selector NOT found for change event!');
+    }
+    
+    // Delete session data button
+    const deleteSessionBtn = document.getElementById('delete-session-data');
+    if (deleteSessionBtn) {
+        deleteSessionBtn.addEventListener('click', () => {
+            const sessionSelector = document.getElementById('story-session-selector') as HTMLSelectElement;
+            const sessionId = sessionSelector.value;
+            if (sessionId) {
+                deleteSessionData(sessionId);
+            } else {
+                showMessage('Please select a session first', 'error');
+            }
+        });
+    }
+    
+
+    
+    // Import story button in summary tab
+    const importStorySummaryBtn = document.getElementById('import-story-summary');
+    if (importStorySummaryBtn) {
+        importStorySummaryBtn.addEventListener('click', () => {
+            importStoryFromFile();
+        });
+    }
+    
+    // Refresh data button
+    const refreshBtn = document.getElementById('refresh-story-data');
+    if (refreshBtn) {
+        console.log('Refresh button found, adding event listener');
+        refreshBtn.addEventListener('click', () => {
+            console.log('Refresh button clicked!');
+            loadStoryManagementData();
+        });
+    } else {
+        console.log('Refresh button NOT found!');
+    }
+    
+    // Refresh button in database overlay (if it exists)
+    const refreshDbBtn = document.getElementById('refresh-db-data');
+    if (refreshDbBtn) {
+        refreshDbBtn.addEventListener('click', () => {
+            loadStoryManagementData();
+        });
+    }
+    
+    // Load story from session button
+    const loadStoryBtn = document.getElementById('load-story-from-session');
+    console.log('🔍 Looking for Load Story button with ID: load-story-from-session');
+    console.log('🎯 Load Story button element found:', !!loadStoryBtn);
+    console.log('🎯 Load Story button details:', loadStoryBtn);
+    
+    if (loadStoryBtn) {
+        console.log('✅ Load Story button found, adding event listener');
+        loadStoryBtn.addEventListener('click', (event) => {
+            console.log('🎮 LOAD STORY BUTTON CLICKED!');
+            console.log('🎮 Click event:', event);
+            console.log('🎮 Button element:', event.target);
+            
+            console.log('🔍 Looking for session selector with ID: story-session-selector');
+            const sessionSelector = document.getElementById('story-session-selector') as HTMLSelectElement;
+            console.log('🎯 Session selector found:', !!sessionSelector);
+            console.log('🎯 Session selector element:', sessionSelector);
+            
+            if (sessionSelector) {
+                const sessionId = sessionSelector.value;
+                console.log('🎯 Selected session ID:', sessionId);
+                console.log('🎯 Session selector value type:', typeof sessionId);
+                console.log('🎯 Session selector all options:', Array.from(sessionSelector.options).map(opt => ({ value: opt.value, text: opt.text })));
+                
+                if (sessionId && sessionId.trim() !== '') {
+                    console.log('✅ Session ID is valid, calling loadGameFromSummary...');
+                    console.log('🔍 Checking if loadGameFromSummary exists on window:', typeof (window as any).loadGameFromSummary);
+                    
+                    try {
+                        (window as any).loadGameFromSummary(sessionId);
+                        console.log('✅ loadGameFromSummary called successfully');
+                    } catch (error) {
+                        console.error('❌ Error calling loadGameFromSummary:', error);
+                        showMessage('Error loading game: ' + (error as Error).message, 'error');
+                    }
+                } else {
+                    console.log('❌ No session selected or empty session ID');
+                    showMessage('Please select a session first', 'error');
+                }
+            } else {
+                console.error('❌ Session selector not found!');
+                showMessage('Session selector not found', 'error');
+            }
+        });
+        console.log('✅ Event listener added to Load Story button');
+    } else {
+        console.error('❌ Load Story button NOT found!');
+        console.log('🔍 Available buttons with "load" in ID:');
+        const allButtons = document.querySelectorAll('button[id*="load"]');
+        allButtons.forEach(btn => console.log('  -', btn.id, btn));
+    }
+    
+    // Delete summary button
+    const deleteSummaryBtn = document.getElementById('delete-summary');
+    if (deleteSummaryBtn) {
+        deleteSummaryBtn.addEventListener('click', () => {
+            const sessionSelector = document.getElementById('story-session-selector') as HTMLSelectElement;
+            const sessionId = sessionSelector.value;
+            if (sessionId) {
+                deleteSessionData(sessionId);
+            } else {
+                showMessage('Please select a session first', 'error');
+            }
+        });
+    }
+    
+    // Delete steps button
+    const deleteStepsBtn = document.getElementById('delete-steps');
+    if (deleteStepsBtn) {
+        deleteStepsBtn.addEventListener('click', () => {
+            const sessionSelector = document.getElementById('story-session-selector') as HTMLSelectElement;
+            const sessionId = sessionSelector.value;
+            if (sessionId) {
+                deleteSessionData(sessionId);
+            } else {
+                showMessage('Please select a session first', 'error');
+            }
+        });
+    }
+}
+
+/**
+ * Load session data
+ */
+async function loadSessionData(sessionId: string): Promise<void> {
+    try {
+        console.log('loadSessionData called with sessionId:', sessionId);
+        const sessionData = await getGameSessionData(sessionId);
+        console.log('getGameSessionData returned:', sessionData);
+        
+        // Update summary display
+        const summaryContainer = document.getElementById('story-summary-container');
+        console.log('summaryContainer found:', !!summaryContainer);
+        console.log('sessionData.storySummaries:', sessionData.storySummaries);
+        console.log('Looking for sessionId:', sessionId);
+        if (summaryContainer) {
+            const summary = sessionData.storySummaries.find((s: any) => s.session_id === sessionId);
+            console.log('summary found:', summary);
+            console.log('summary.session_id:', summary?.session_id);
+            console.log('summary.summary:', summary?.summary);
+            if (summary) {
+                summaryContainer.innerHTML = `<div class="text-gray-300">${summary.summary}</div>`;
+                console.log('Summary content updated');
+            } else {
+                summaryContainer.innerHTML = '<span class="text-gray-500">No summary found for this session</span>';
+                console.log('No summary found for session');
+            }
+        }
+        
+        // Update steps display
+        const stepsContainer = document.getElementById('story-steps-container');
+        if (stepsContainer) {
+            // For now, show placeholder - you can expand this to show actual steps
+            stepsContainer.innerHTML = '<span class="text-gray-500">Story steps display coming soon...</span>';
+        }
+        
+        // Show session info
+        const sessionInfo = document.getElementById('session-info');
+        if (sessionInfo) {
+            sessionInfo.classList.remove('hidden');
+            const sessionDetails = document.getElementById('session-details');
+            if (sessionDetails) {
+                sessionDetails.innerHTML = `
+                    <div class="text-gray-300">
+                        <div><strong>Session ID:</strong> ${sessionId}</div>
+                        <div><strong>Summary:</strong> ${sessionData.storySummaries.length > 0 ? 'Yes' : 'No'}</div>
+                        <div><strong>Steps:</strong> ${sessionData.storySummaries.length > 0 ? sessionData.storySummaries[0].step_count || 0 : 0}</div>
+                    </div>
+                `;
+            }
+        }
+        
+    } catch (error) {
+        console.error('Error loading session data:', error);
+        showMessage('Failed to load session data: ' + (error as Error).message, 'error');
+    }
+}
+
+/**
+ * Load game from session
+ */
+async function loadGameFromSession(sessionId: string): Promise<void> {
+                    try {
+                    await (window as any).loadGameFromSummary(sessionId);
+                } catch (error) {
+        console.error('Failed to load game from session:', error);
+        showMessage('Failed to load game from session', 'error');
+    }
+}
+
+/**
+ * Load game from a story summary session
+ */
+// Make function globally accessible
+(window as any).loadGameFromSummary = async function(sessionId: string): Promise<void> {
+    console.log('🚀 loadGameFromSummary called with sessionId:', sessionId);
+    try {
+        console.log('📦 Importing database module...');
+        // Get the story steps for this session
+        const { loadStorySteps } = await import('./database.js');
+        console.log('✅ Database module imported successfully');
+        
+        console.log('🔍 Loading story steps for session:', sessionId);
+        const storySteps = await loadStorySteps(sessionId);
+        console.log('📊 Story steps loaded:', storySteps.length, 'steps');
+        console.log('📊 Story steps data:', storySteps);
+        
+        if (storySteps.length === 0) {
+            console.log('❌ No story steps found for session');
+            showMessage('No story steps found for this session', 'error');
+            return;
+        }
+        
+        console.log('🔄 Sorting steps by step number...');
+        // Sort steps by step number to ensure correct order
+        storySteps.sort((a, b) => a.step_number - b.step_number);
+        console.log('✅ Steps sorted successfully');
+        
+        console.log('🔧 Reconstructing game state from story steps...');
+        // Reconstruct the game state from story steps
+        const reconstructedGameState = {
+            messageHistory: [],
+            storyLog: storySteps.map(step => ({
+                id: step.story_entry_id,
+                story: step.story_text,
+                imagePrompt: step.image_prompt,
+                choices: step.choices,
+                timestamp: step.timestamp
+            })),
+            actionLog: storySteps.map(step => ({
+                choice: step.choice,
+                outcome: step.outcome,
+                timestamp: step.timestamp
+            })),
+            memories: storySteps.flatMap(step => step.new_memories),
+            currentState: 'PLAYING'
+        };
+        console.log('✅ Game state reconstructed:', reconstructedGameState);
+        
+        console.log('🔄 Resetting current game state...');
+        // Reset current game state
+        resetGame();
+        console.log('✅ Game reset completed');
+        
+        console.log('📥 Importing reconstructed game data...');
+        // Import the reconstructed data
+        importGame(reconstructedGameState);
+        console.log('✅ Game data imported successfully');
+        
+        console.log('🚪 Closing story management overlay...');
+        // Close the overlay and show success message
+        hideStoryManagementOverlay();
+        console.log('✅ Overlay closed');
+        showMessage('Game loaded successfully from session!', 'success');
+        
+    } catch (error) {
+        console.error('❌ CRITICAL ERROR in loadGameFromSummary:', error);
+        console.error('❌ Error type:', typeof error);
+        console.error('❌ Error message:', (error as Error).message);
+        console.error('❌ Error stack:', (error as Error).stack);
+        showMessage('Failed to load game from summary: ' + (error as Error).message, 'error');
+    }
+}
+
+/**
+ * Delete session data
+ */
+async function deleteSessionData(sessionId: string): Promise<void> {
+    if (confirm(`Are you sure you want to delete all data for session ${sessionId}?`)) {
+        try {
+            await deleteStorySummaryFromDatabase(sessionId);
+            showMessage('Session data deleted successfully', 'success');
+            
+            // Clear the current session display
+            const summaryContainer = document.getElementById('story-summary-container');
+            if (summaryContainer) {
+                summaryContainer.innerHTML = '<span class="text-gray-500">Select a session to view summary...</span>';
+            }
+            
+            const stepsContainer = document.getElementById('story-steps-container');
+            if (stepsContainer) {
+                stepsContainer.innerHTML = '<span class="text-gray-500">Select a session to view steps...</span>';
+            }
+            
+            const sessionInfo = document.getElementById('session-info');
+            if (sessionInfo) {
+                sessionInfo.classList.add('hidden');
+            }
+            
+            // Reset session selector
+            const sessionSelector = document.getElementById('story-session-selector') as HTMLSelectElement;
+            if (sessionSelector) {
+                sessionSelector.value = '';
+            }
+            
+            // Refresh all data
+            await loadStoryManagementData();
+        } catch (error) {
+            console.error('Failed to delete session data:', error);
+            showMessage('Failed to delete session data', 'error');
+        }
+    }
+}
+
+/**
+ * Import story from file
+ */
+function importStoryFromFile(): void {
+    // Create a hidden file input
+    const fileInput = document.createElement('input');
+    fileInput.type = 'file';
+    fileInput.accept = '.json,application/json';
+    fileInput.style.display = 'none';
+    
+    fileInput.addEventListener('change', (event) => {
+        const target = event.target as HTMLInputElement;
+        const file = target.files?.[0];
+        if (!file) return;
+        
+        if (!file.name.endsWith('.json') && file.type !== 'application/json') {
+            showMessage('Invalid file type. Please select a .json adventure file.', 'error');
+            return;
+        }
+        
+        const reader = new FileReader();
+        reader.onload = (e) => {
+            try {
+                const data = JSON.parse(e.target?.result as string);
+                if (data.messageHistory && data.storyLog) {
+                    importGame(data);
+                    hideStoryManagementOverlay();
+                    showMessage('Adventure imported successfully!', 'success');
+                } else {
+                    throw new Error('Invalid adventure file format. Required data is missing.');
+                }
+            } catch (error) {
+                console.error('Error parsing adventure file:', error);
+                showMessage('Could not read the adventure file. It might be corrupted or in the wrong format.', 'error');
+            }
+        };
+        
+        reader.onerror = () => {
+            showMessage('There was an error reading the selected file.', 'error');
+        };
+        
+        reader.readAsText(file);
+    });
+    
+    document.body.appendChild(fileInput);
+    fileInput.click();
+    document.body.removeChild(fileInput);
+}
+
+/**
  * Database Overlay Functions
  */
 
@@ -3278,14 +3964,18 @@ function formatSummaryData(summaries: any[], showDeleteButtons: boolean = false)
                     <div class="mt-2 p-2 bg-gray-900 rounded max-h-32 overflow-y-auto">${summary.summary}</div>
                 </details>
             </div>
+            <div class="mt-2 flex gap-2">
+                <button onclick="loadGameFromSummary('${summary.session_id}')" 
+                        class="bg-blue-600 hover:bg-blue-500 text-white px-3 py-1 rounded text-xs">
+                    🎮 Load Game
+                </button>
             ${showDeleteButtons ? `
-                <div class="mt-2">
                     <button onclick="deleteStorySummary('${summary.session_id}')" 
                             class="bg-red-600 hover:bg-red-500 text-white px-3 py-1 rounded text-xs">
                         🗑️ Delete Summary
                     </button>
-                </div>
             ` : ''}
+            </div>
         </div>
     `).join('');
 }
@@ -3512,30 +4202,15 @@ async function loadStorySessions(): Promise<void> {
  * Setup story management event handlers
  */
 function setupStoryManagementHandlers(): void {
-    // Load game button
-    const loadGameButton = document.getElementById('load-game');
-    if (loadGameButton) {
-        loadGameButton.addEventListener('click', async () => {
+    // Load story from session button
+    const loadStoryButton = document.getElementById('load-story-from-session');
+    if (loadStoryButton) {
+        loadStoryButton.addEventListener('click', async () => {
             const selector = document.getElementById('story-session-selector') as HTMLSelectElement;
             const sessionId = selector?.value;
             
             if (sessionId) {
-                await loadGameFromDatabase(sessionId);
-            } else {
-                showMessage('Please select a session first', 'error');
-            }
-        });
-    }
-    
-    // View summary and steps button
-    const viewButton = document.getElementById('view-summary-and-steps');
-    if (viewButton) {
-        viewButton.addEventListener('click', async () => {
-            const selector = document.getElementById('story-session-selector') as HTMLSelectElement;
-            const sessionId = selector?.value;
-            
-            if (sessionId) {
-                await loadAndDisplaySummaryAndSteps(sessionId);
+                (window as any).loadGameFromSummary(sessionId);
             } else {
                 showMessage('Please select a session first', 'error');
             }

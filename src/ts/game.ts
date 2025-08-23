@@ -1126,7 +1126,7 @@ export function exportGameState(): string {
     const exportData = {
         gameState: gameState,
         exportDate: new Date().toISOString(),
-        version: '1.0.10'
+        version: '1.0.17'
     };
     return JSON.stringify(exportData, null, 2);
 }
@@ -1317,7 +1317,7 @@ export function exportSessionData(): string {
         session: currentSession,
         gameState: gameState,
         exportDate: new Date().toISOString(),
-        version: '1.0.10'
+        version: '1.0.17'
     };
     return JSON.stringify(exportData, null, 2);
 }
