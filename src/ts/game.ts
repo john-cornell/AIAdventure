@@ -652,7 +652,7 @@ export async function executeLLMCall(retries: number = 3): Promise<void> {
                 response.image_prompt = `A scene showing: ${response.story.substring(0, 100)}...`;
             }
             
-            if (!response.choices || !Array.isArray(response.choices) || response.choices.length !== 4) {
+            if (!response.choices || !Array.isArray(response.choices) || response.choices.length < 2) {
                 logWarn('Game', 'Invalid or missing choices in response, generating fallback choices');
                 response.choices = [
                     "Continue exploring",
@@ -660,6 +660,8 @@ export async function executeLLMCall(retries: number = 3): Promise<void> {
                     "Take action",
                     "Proceed carefully"
                 ];
+            } else if (response.choices.length < 4) {
+                logWarn('Game', `LLM provided ${response.choices.length} choices (prefer 4, but ${response.choices.length} is acceptable)`);
             }
             
 
@@ -790,13 +792,15 @@ export async function executeLLMCall(retries: number = 3): Promise<void> {
                         response.image_prompt = `A scene showing: ${response.story.substring(0, 100)}...`;
                     }
                     
-                    if (!response.choices || !Array.isArray(response.choices) || response.choices.length !== 4) {
+                    if (!response.choices || !Array.isArray(response.choices) || response.choices.length < 2) {
                         response.choices = [
                             "Continue exploring",
                             "Investigate further", 
                             "Take action",
                             "Proceed carefully"
                         ];
+                    } else if (response.choices.length < 4) {
+                        logWarn('Game', `Fallback response: LLM provided ${response.choices.length} choices (prefer 4, but ${response.choices.length} is acceptable)`);
                     }
                     
                     
