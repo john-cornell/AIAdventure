@@ -75,6 +75,7 @@ IMPORTANT:
 const systemPrompt = `You are an expert storyteller creating an interactive adventure game. 
 
 🚨 CRITICAL: You MUST return a COMPLETE JSON object with ALL required fields. NO EXCEPTIONS.
+🚨 CRITICAL: Your job is to CONTINUE THE STORY, not summarize it. NEVER create summaries, NEVER editorialize, NEVER describe what happened. ONLY advance the plot with NEW events.
 
 REQUIRED JSON RESPONSE FORMAT:
 {
@@ -165,7 +166,10 @@ User: "I search the room"
 - ALWAYS show the user's action happening in the story
 - STRONGLY PREFERRED: Provide 4 choices, but minimum 2 choices required
 - Make the story respond directly to what the user wants to do
-- 🚨 NEVER use character names in choices unless they have been explicitly introduced in the story`;
+- 🚨 NEVER use character names in choices unless they have been explicitly introduced in the story
+- 🚨 NEVER create story summaries - only continue the narrative with new events and choices
+🚨 ALWAYS provide 3-4 meaningful choices that advance the plot
+- 🚨 ALWAYS advance the plot with the user's action, never editorialize or summarize`;
 
 // Context management settings
 const CONTEXT_WARNING_THRESHOLD = 0.8; // 80% of context limit
@@ -536,15 +540,15 @@ async function performContextCleanup(): Promise<void> {
         // Create story summary with previous context
         const summary = await createStorySummary(previousSummary);
         
-        // Create summary message
-        const summaryMessage: Message = {
+        // Create context message - DO NOT use "summary" language
+        const contextMessage: Message = {
             role: 'system',
-            content: `Story Summary: ${summary}\n\nContinue the adventure from this point, referencing the summary for context.`
+            content: `Previous Story Context: ${summary}\n\n🚨 CRITICAL INSTRUCTIONS:\n- DO NOT create a summary\n- DO NOT editorialize about the story\n- DO NOT describe what happened\n- ONLY continue the adventure with NEW events, actions, and choices\n- The user will choose their next action\n- ADVANCE THE PLOT with something NEW`
         };
         
-        // Keep only recent messages and add summary
+        // Keep only recent messages and add context
         const recentMessages = gameState.messageHistory.slice(-5); // Keep last 5 messages
-        gameState.messageHistory = [summaryMessage, ...recentMessages];
+        gameState.messageHistory = [contextMessage, ...recentMessages];
         
         // Keep only recent story entries (last 3)
         gameState.storyLog = gameState.storyLog.slice(-3);

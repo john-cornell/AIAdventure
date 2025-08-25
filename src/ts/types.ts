@@ -116,6 +116,21 @@ export interface DatabaseConfig {
     storyRetentionDays: number; // How many days to keep stories
 }
 
+// Database story step types
+export interface StoryStepData {
+    sessionId: string;
+    stepNumber: number;
+    storyEntryId: string;
+    choice: string;
+    outcome: string;
+    story: string;
+    imagePrompt: string;
+    choices: string[];
+    memories: string[];
+    timestamp: number;
+    imageData?: string;
+}
+
 export interface MemoriesConfig {
     enabled: boolean; // Whether memory system is enabled
     maxMemories: number; // Maximum number of memories to keep per session

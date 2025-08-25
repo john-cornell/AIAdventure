@@ -669,6 +669,15 @@ function createSettingsModalHTML(): string {
                                     <span id="lora-section-icon" class="text-gray-400">▶</span>
                                 </button>
                                 <div id="lora-section" class="p-4 bg-gray-800 rounded-b-lg" style="display: none;">
+                                    <div class="flex items-center justify-between mb-3">
+                                        <div class="text-xs text-gray-400">
+                                            Add LORA models to enhance image generation. Set strength from 0.0 to 1.0.
+                                        </div>
+                                        <button id="refresh-lora-models" 
+                                                class="text-xs text-green-400 hover:text-green-300">
+                                            🔄 Refresh LORA Models
+                                        </button>
+                                    </div>
                                     <div id="lora-container" class="space-y-3">
                                         <!-- LORA entries will be added here dynamically -->
                                     </div>
@@ -676,9 +685,6 @@ function createSettingsModalHTML(): string {
                                             class="mt-2 bg-blue-600 hover:bg-blue-500 text-white px-3 py-1 rounded text-sm">
                                         ➕ Add LORA
                                     </button>
-                                    <div class="text-xs text-gray-400 mt-1">
-                                        Add LORA models to enhance image generation. Set strength from 0.0 to 1.0.
-                                    </div>
                                 </div>
                             </div>
                             
@@ -1352,6 +1358,8 @@ function setupSettingsEvents(): void {
     
     // LORA settings
     const addLoraBtn = document.getElementById('add-lora');
+    const refreshLoraBtn = document.getElementById('refresh-lora-models');
+    
     if (addLoraBtn) {
         addLoraBtn.addEventListener('click', () => {
             const container = document.getElementById('lora-container');
@@ -1367,6 +1375,10 @@ function setupSettingsEvents(): void {
                 saveSettingsImmediately(); // Save when new LORA is added
             }
         });
+    }
+    
+    if (refreshLoraBtn) {
+        refreshLoraBtn.addEventListener('click', () => refreshAllLoraDropdowns());
     }
     
         // Textual Inversion settings
@@ -2010,6 +2022,80 @@ async function loadLoraModelsIntoDropdown(select: HTMLSelectElement, selectedLor
             }
             select.appendChild(option);
         });
+    }
+}
+
+/**
+ * Refresh all LORA dropdowns with the latest models from the server
+ */
+async function refreshAllLoraDropdowns(): Promise<void> {
+    try {
+        console.log('🔄 Refreshing LORA models...');
+        
+        // Get all LORA name selects in the container
+        const container = document.getElementById('lora-container');
+        if (!container) return;
+        
+        const loraSelects = container.querySelectorAll('.lora-name') as NodeListOf<HTMLSelectElement>;
+        
+        if (loraSelects.length === 0) {
+            console.log('No LORA dropdowns found to refresh');
+            return;
+        }
+        
+        // Get fresh LORA models from the server
+        const config = await loadConfig();
+        const loraModels = await getAvailableLoraModels(config.stableDiffusion.url);
+        
+        console.log(`🎨 Found ${loraModels.length} LORA models on server`);
+        
+        // Refresh each dropdown
+        loraSelects.forEach((select, index) => {
+            const currentValue = select.value; // Preserve current selection
+            
+            // Clear existing options except the first one
+            const firstOption = select.querySelector('option');
+            select.innerHTML = '';
+            if (firstOption) select.appendChild(firstOption);
+            
+            // Add LORA models
+            loraModels.forEach((loraName: string) => {
+                const option = document.createElement('option');
+                option.value = loraName;
+                option.textContent = loraName;
+                if (currentValue && loraName === currentValue) {
+                    option.selected = true; // Restore previous selection if still available
+                }
+                select.appendChild(option);
+            });
+            
+            console.log(`🔄 Refreshed LORA dropdown ${index + 1} with ${loraModels.length} models`);
+        });
+        
+        // Show success message
+        const statusElement = document.getElementById('sd-status-text');
+        if (statusElement) {
+            statusElement.textContent = `LORA models refreshed (${loraModels.length} found)`;
+            setTimeout(() => {
+                if (statusElement.textContent?.includes('LORA models refreshed')) {
+                    statusElement.textContent = 'Ready';
+                }
+            }, 3000);
+        }
+        
+    } catch (error) {
+        console.error('Failed to refresh LORA models:', error);
+        
+        // Show error message
+        const statusElement = document.getElementById('sd-status-text');
+        if (statusElement) {
+            statusElement.textContent = 'Failed to refresh LORA models';
+            setTimeout(() => {
+                if (statusElement.textContent === 'Failed to refresh LORA models') {
+                    statusElement.textContent = 'Ready';
+                }
+            }, 3000);
+        }
     }
 }
 
@@ -3053,7 +3139,10 @@ function updateStoryDisplay(): void {
             entry.choices.forEach(choice => {
                 const choiceBtn = document.createElement('button');
                 choiceBtn.className = 'choice-button bg-gray-700 hover:bg-gray-600 text-white p-4 rounded-lg transition-colors duration-300 text-left font-medium';
+                
+                // Since choices are strings, just use the choice directly
                 choiceBtn.textContent = choice;
+                
                 choicesContainer.appendChild(choiceBtn);
             });
         }
@@ -3755,7 +3844,10 @@ async function loadSessionData(sessionId: string): Promise<void> {
                 console.log('Story steps data:', storySteps);
                 
                 if (storySteps.length > 0) {
-                    stepsContainer.innerHTML = formatStoryStepsData(storySteps, false);
+                    stepsContainer.innerHTML = formatStoryStepsData(storySteps, true);
+                    
+                    // Add event listeners for delete step buttons
+                    setupDeleteStepEventListeners(stepsContainer, sessionId);
                 } else {
                     stepsContainer.innerHTML = '<span class="text-gray-500">No story steps found for this session</span>';
                 }
@@ -4267,29 +4359,78 @@ function formatStoryStepsData(steps: any[], showDeleteButtons: boolean = false):
         return '<span class="text-gray-500">No story steps found</span>';
     }
     
-    return steps.map(step => `
-        <div class="mb-4 p-3 bg-gray-800 rounded border border-gray-600">
-            <div class="font-semibold text-blue-400">Step ${step.step_number}</div>
-            <div class="text-green-400">Choice: ${step.choice}</div>
-            <div class="text-yellow-400">Outcome: ${step.outcome}</div>
-            <div class="text-yellow-400">Timestamp: ${new Date(step.timestamp).toLocaleString()}</div>
-            <div class="mt-2 text-xs text-gray-400">
-                <details>
-                    <summary class="cursor-pointer hover:text-gray-300">View Story Content</summary>
-                    <div class="mt-2 p-2 bg-gray-900 rounded max-h-32 overflow-y-auto">
-                        <div class="mb-2"><strong>Story:</strong> ${step.story_text}</div>
-                        <div class="mb-2"><strong>Image Prompt:</strong> ${step.image_prompt}</div>
-                        <div class="mb-2"><strong>Choices:</strong> ${step.choices.join(', ')}</div>
-                        <div class="mb-2"><strong>New Memories:</strong> ${step.new_memories.join(', ')}</div>
-                    </div>
-                </details>
+    // Find the highest step number to determine which is the latest
+    const maxStepNumber = Math.max(...steps.map(s => s.step_number));
+    
+    return steps.map(step => {
+        const isLatestStep = step.step_number === maxStepNumber;
+        const deleteButton = showDeleteButtons ? `
+            <button class="delete-step-btn bg-red-600 hover:bg-red-500 text-white text-xs px-2 py-1 rounded ml-2 transition-colors"
+                    data-session-id="${step.session_id || 'unknown'}" 
+                    data-step-number="${step.step_number}"
+                    data-is-latest="${isLatestStep}"
+                    title="${isLatestStep ? 'Delete this step and continue from previous step' : 'Delete this step (will require game reconstruction)'}">
+                🗑️ ${isLatestStep ? 'Delete Latest' : 'Delete'}
+            </button>
+        ` : '';
+        
+        return `
+            <div class="mb-4 p-3 bg-gray-800 rounded border border-gray-600">
+                <div class="flex justify-between items-start">
+                    <div class="font-semibold text-blue-400">Step ${step.step_number}</div>
+                    ${deleteButton}
+                </div>
+                <div class="text-green-400">Choice: ${step.choice}</div>
+                <div class="text-yellow-400">Outcome: ${step.outcome}</div>
+                <div class="text-yellow-400">Timestamp: ${new Date(step.timestamp).toLocaleString()}</div>
+                <div class="mt-2 text-xs text-gray-400">
+                    <details>
+                        <summary class="cursor-pointer hover:text-gray-300">View Story Content</summary>
+                        <div class="mt-2 p-2 bg-gray-900 rounded max-h-32 overflow-y-auto">
+                            <div class="mb-2"><strong>Story:</strong> ${step.story_text}</div>
+                            <div class="mb-2"><strong>Image Prompt:</strong> ${step.image_prompt}</div>
+                            <div class="mb-2"><strong>Choices:</strong> ${step.choices.join(', ')}</div>
+                            <div class="mb-2"><strong>New Memories:</strong> ${step.new_memories.join(', ')}</div>
+                        </div>
+                    </details>
+                </div>
             </div>
-        </div>
-    `).join('');
+        `;
+    }).join('');
+}
+
+/**
+ * Setup delete step event listeners for a container
+ */
+function setupDeleteStepEventListeners(container: HTMLElement, sessionId: string): void {
+    const deleteButtons = container.querySelectorAll('.delete-step-btn');
+    deleteButtons.forEach(button => {
+        button.addEventListener('click', async (e) => {
+            const target = e.target as HTMLButtonElement;
+            const buttonSessionId = target.dataset.sessionId;
+            const stepNumber = parseInt(target.dataset.stepNumber || '0');
+            
+            if (buttonSessionId && stepNumber > 0) {
+                const isLatestStep = target.dataset.isLatest === 'true';
+                const confirmMessage = isLatestStep 
+                    ? `Are you sure you want to delete step ${stepNumber}? This will remove the latest story step and continue from previous step.`
+                    : `Are you sure you want to delete step ${stepNumber}? This will remove this step from the story and may require game reconstruction.`;
+                
+                if (confirm(confirmMessage)) {
+                    if (isLatestStep) {
+                        await deleteLatestStepAndRedraw(buttonSessionId, stepNumber);
+                    } else {
+                        await deleteIndividualStep(buttonSessionId, stepNumber);
+                    }
+                }
+            }
+        });
+    });
 }
 
 /**
  * Load and display story steps for a session
+ * @deprecated Use formatStoryStepsData directly with proper event listener setup
  */
 async function loadAndDisplayStorySteps(sessionId: string): Promise<void> {
     try {
@@ -4299,6 +4440,9 @@ async function loadAndDisplayStorySteps(sessionId: string): Promise<void> {
         const stepsContainer = document.getElementById('story-steps-container');
         if (stepsContainer) {
             stepsContainer.innerHTML = formatStoryStepsData(steps, true);
+            
+            // Add event listeners for delete step buttons
+            setupDeleteStepEventListeners(stepsContainer, sessionId);
         }
     } catch (error) {
         console.error('Error loading story steps:', error);
@@ -4622,52 +4766,16 @@ async function loadAndDisplaySummaryAndSteps(sessionId: string): Promise<void> {
         
         if (stepsContainer) {
             if (steps.length > 0) {
-                const stepsHtml = steps.map((step, index) => {
-                    const isLatestStep = index === steps.length - 1;
-                    const deleteButton = isLatestStep ? `
-                        <button class="delete-latest-step-btn bg-red-600 hover:bg-red-500 text-white text-xs px-2 py-1 rounded ml-2 transition-colors"
-                                data-session-id="${sessionId}" 
-                                data-step-number="${step.step_number}"
-                                title="Delete this step and continue from previous step">
-                            🗑️ Delete Latest
-                        </button>
-                    ` : '';
-                    
-                    return `
-                        <div class="border-b border-gray-700 pb-2 mb-2">
-                            <div class="flex justify-between items-start">
-                                <div class="text-white font-semibold">Step ${step.step_number}</div>
-                                ${deleteButton}
-                            </div>
-                            <div class="text-gray-300 text-xs">${new Date(step.timestamp).toLocaleString()}</div>
-                            <div class="text-gray-300 mt-1">${step.story_text}</div>
-                            ${step.choice ? `<div class="text-blue-300 text-xs mt-1">Choice: ${step.choice}</div>` : ''}
-                        </div>
-                    `;
-                }).join('');
-                
+                // Use the consolidated formatStoryStepsData function
                 stepsContainer.innerHTML = `
                     <div class="space-y-2">
                         <div class="text-white font-semibold mb-2">Story Steps (${steps.length}):</div>
-                        ${stepsHtml}
+                        ${formatStoryStepsData(steps, true)}
                     </div>
                 `;
                 
-                // Add event listeners for delete latest step buttons
-                const deleteButtons = stepsContainer.querySelectorAll('.delete-latest-step-btn');
-                deleteButtons.forEach(button => {
-                    button.addEventListener('click', async (e) => {
-                        const target = e.target as HTMLButtonElement;
-                        const sessionId = target.dataset.sessionId;
-                        const stepNumber = parseInt(target.dataset.stepNumber || '0');
-                        
-                        if (sessionId && stepNumber > 0) {
-                            if (confirm(`Are you sure you want to delete step ${stepNumber}? This will remove the latest story step and continue from the previous step.`)) {
-                                await deleteLatestStepAndRedraw(sessionId, stepNumber);
-                            }
-                        }
-                    });
-                });
+                // Add event listeners for delete step buttons
+                setupDeleteStepEventListeners(stepsContainer, sessionId);
             } else {
                 stepsContainer.innerHTML = '<span class="text-gray-500">No story steps found for this session</span>';
             }
@@ -4797,6 +4905,81 @@ async function deleteLatestStepAndRedraw(sessionId: string, stepNumber: number):
         
     } catch (error) {
         console.error('❌ Error deleting latest step:', error);
+        showMessage(`Failed to delete step: ${error instanceof Error ? error.message : 'Unknown error'}`, 'error');
+    }
+}
+
+/**
+ * Delete an individual story step (not necessarily the latest)
+ */
+async function deleteIndividualStep(sessionId: string, stepNumber: number): Promise<void> {
+    try {
+        console.log(`🗑️ Deleting individual step ${stepNumber} from session ${sessionId}`);
+        
+        // Get the story steps for this session
+        const { loadStorySteps, deleteStorySteps } = await import('./database.js');
+        const allSteps = await loadStorySteps(sessionId);
+        
+        if (allSteps.length === 0) {
+            showMessage('No story steps found for this session', 'error');
+            return;
+        }
+        
+        // Find the step to delete
+        const stepToDelete = allSteps.find(step => step.step_number === stepNumber);
+        if (!stepToDelete) {
+            showMessage(`Step ${stepNumber} not found`, 'error');
+            return;
+        }
+        
+        // For individual step deletion, we need to delete the specific step
+        // and then renumber subsequent steps to maintain continuity
+        const { deleteSpecificStoryStep, saveStoryStep } = await import('./database.js');
+        
+        // Delete the specific step
+        const deleteSuccess = await deleteSpecificStoryStep(sessionId, stepNumber);
+        if (!deleteSuccess) {
+            showMessage(`Failed to delete step ${stepNumber}`, 'error');
+            return;
+        }
+        
+        // Get remaining steps after deletion
+        const remainingSteps = allSteps.filter(step => step.step_number !== stepNumber);
+        
+        // Renumber subsequent steps to maintain continuity
+        const stepsToRenumber = remainingSteps.filter(step => step.step_number > stepNumber);
+        if (stepsToRenumber.length > 0) {
+            for (const step of stepsToRenumber) {
+                // Update the step number in the database
+                await saveStoryStep(
+                    sessionId,
+                    step.step_number - 1, // Decrease step number by 1
+                    step.story_entry_id,
+                    step.choice,
+                    step.outcome,
+                    step.story_text,
+                    step.image_prompt,
+                    step.choices,
+                    step.new_memories,
+                    step.timestamp,
+                    step.image_data
+                );
+                
+                // Delete the old step with the old number
+                await deleteSpecificStoryStep(sessionId, step.step_number);
+            }
+        }
+        
+        console.log(`✅ Step ${stepNumber} deleted successfully. Renumbered ${stepsToRenumber.length} subsequent steps.`);
+        
+        // Refresh the story management display
+        await loadAndDisplaySummaryAndSteps(sessionId);
+        
+        // Show success message
+        showMessage(`Step ${stepNumber} deleted successfully! ${remainingSteps.length} steps remaining.`, 'success');
+        
+    } catch (error) {
+        console.error('❌ Error deleting individual step:', error);
         showMessage(`Failed to delete step: ${error instanceof Error ? error.message : 'Unknown error'}`, 'error');
     }
 }

@@ -558,6 +558,27 @@ export async function deleteStorySteps(sessionId: string): Promise<boolean> {
 }
 
 /**
+ * Delete a specific story step by session ID and step number
+ */
+export async function deleteSpecificStoryStep(sessionId: string, stepNumber: number): Promise<boolean> {
+    try {
+        const database = getDatabase();
+        const deletedCount = await database.storySteps
+            .where('session_id')
+            .equals(sessionId)
+            .and(step => step.step_number === stepNumber)
+            .delete();
+        
+        logInfo('Database', `Deleted step ${stepNumber} from session ${sessionId}`);
+        return deletedCount > 0;
+        
+    } catch (error) {
+        logError('Database', `Failed to delete step ${stepNumber} from session ${sessionId}`, error);
+        return false;
+    }
+}
+
+/**
  * Get all sessions with story steps
  */
 export async function getAllStoryStepSessions(): Promise<string[]> {
