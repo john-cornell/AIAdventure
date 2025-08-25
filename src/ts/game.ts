@@ -77,6 +77,15 @@ const systemPrompt = `You are an expert storyteller creating an interactive adve
 🚨 CRITICAL: You MUST return a COMPLETE JSON object with ALL required fields. NO EXCEPTIONS.
 🚨 CRITICAL: Your job is to CONTINUE THE STORY, not summarize it. NEVER create summaries, NEVER editorialize, NEVER describe what happened. ONLY advance the plot with NEW events.
 
+🚨 STORY PROGRESSION RULES:
+- When user makes a choice, SHOW what happens next
+- DO NOT give conditional "if/then" choices
+- DO NOT ask what the user wants to do
+- DO NOT give multiple possible outcomes
+- SHOW the actual result of their action
+- ADVANCE the narrative with concrete events
+- Then provide NEW choices for the NEXT action
+
 REQUIRED JSON RESPONSE FORMAT:
 {
   "story": "A vivid, engaging description of the current scene and what happens next",
@@ -273,6 +282,46 @@ function detectRepetitiveChoices(): boolean {
  */
 function shouldSummarizeDueToRepetition(): boolean {
     return detectRepetitiveSteps() || detectRepetitiveChoices();
+}
+
+/**
+ * Get enhanced story quality prompt
+ */
+function getEnhancedStoryQualityPrompt(): string {
+    return `You are a storyteller continuing an ongoing adventure. 
+
+CRITICAL: Generate a COMPLETE and MEANINGFUL story response.
+
+Requirements:
+- Story must be AT LEAST 200-300 words long
+- Include meaningful dialogue, action, and character development
+- Show story progression, not just status updates
+- End with complete sentences and natural story beats
+- Include character reactions, decisions, and consequences
+- Make the story engaging and move the plot forward
+- Avoid abrupt endings or incomplete thoughts
+
+Write a rich, detailed story that advances the narrative significantly.`;
+}
+
+/**
+ * Get anti-summarization prompt
+ */
+function getAntiSummarizationPrompt(): string {
+    return `You are a storyteller continuing an ongoing adventure. 
+
+CRITICAL: DO NOT SUMMARIZE what has already happened. 
+
+Instead:
+- Continue the story from the current moment
+- Describe what happens NEXT, not what happened before
+- Focus on new developments and actions
+- Provide fresh story content that advances the plot
+- Avoid using words like "initially", "have grown", "have acquired", "recently", "since then"
+- Do not repeat past events or describe previous actions
+- Write in present tense for current events, not past tense for summaries
+
+Tell the story as it unfolds in the present moment.`;
 }
 
 /**
@@ -543,7 +592,7 @@ async function performContextCleanup(): Promise<void> {
         // Create context message - DO NOT use "summary" language
         const contextMessage: Message = {
             role: 'system',
-            content: `Previous Story Context: ${summary}\n\n🚨 CRITICAL INSTRUCTIONS:\n- DO NOT create a summary\n- DO NOT editorialize about the story\n- DO NOT describe what happened\n- ONLY continue the adventure with NEW events, actions, and choices\n- The user will choose their next action\n- ADVANCE THE PLOT with something NEW`
+            content: `Previous Story Context: ${summary}\n\n🚨 CRITICAL INSTRUCTIONS:\n- DO NOT create a summary\n- DO NOT editorialize about the story\n- DO NOT describe what happened\n- ONLY continue the adventure with NEW events, actions, and choices\n- The user will choose their next action\n- ADVANCE THE PLOT with something NEW\n\n🚨 STORY PROGRESSION RULES:\n- When user makes a choice, SHOW what happens next\n- DO NOT give conditional "if/then" choices\n- DO NOT ask what the user wants to do\n- SHOW the actual result of their action\n- ADVANCE the narrative with concrete events`
         };
         
         // Keep only recent messages and add context
@@ -665,8 +714,53 @@ export async function executeLLMCall(retries: number = 3): Promise<void> {
         let response = await callLocalLLMWithRetry(currentSystemPrompt, gameState.messageHistory, jsonFields, retries);
         logInfo('Game', 'Received LLM response', response);
         
-        // Fallback mechanism for incomplete responses
+        // Debug choices structure
+        if (response && response.choices) {
+            console.log('🔍 Game: Raw choices from LLM:', response.choices);
+            console.log('🔍 Game: Choices type:', typeof response.choices);
+            console.log('🔍 Game: Is array:', Array.isArray(response.choices));
+            response.choices.forEach((choice: any, index: number) => {
+                console.log(`🔍 Game: Choice ${index}:`, choice, 'Type:', typeof choice);
+            });
+        }
+        
+        // Check for summarization before processing
         if (response && response.story) {
+            const { detectSummarization } = await import('./json-cleaner.js');
+            const summarizationCheck = detectSummarization(response);
+            
+            if (summarizationCheck.isSummarizing) {
+                console.warn(`⚠️ Summarization detected: ${summarizationCheck.reason}`);
+                throw new Error(`Story summarization detected: ${summarizationCheck.reason}`);
+            }
+            
+            // Check for poor story quality (too short, incomplete, etc.)
+            const { detectPoorStoryQuality, confirmStoryProgression } = await import('./json-cleaner.js');
+            const qualityCheck = detectPoorStoryQuality(response);
+            
+            if (qualityCheck.isPoorQuality) {
+                console.warn(`⚠️ Poor story quality detected: ${qualityCheck.reason}`);
+                
+                // Get the previous step and player choice for LLM confirmation
+                const previousStep = gameState.storyLog.length > 0 
+                    ? gameState.storyLog[gameState.storyLog.length - 1].story 
+                    : 'Story beginning';
+                const playerChoice = gameState.actionLog.length > 0 
+                    ? gameState.actionLog[gameState.actionLog.length - 1].choice 
+                    : 'Initial choice';
+                
+                console.log('🔍 Asking LLM to confirm story progression...');
+                const confirmation = await confirmStoryProgression(previousStep, playerChoice, response.story);
+                
+                if (!confirmation.confirmed) {
+                    console.warn(`⚠️ LLM confirmed poor story progression: ${confirmation.reason}`);
+                    throw new Error(`LLM confirmed poor story progression: ${confirmation.reason}`);
+                } else {
+                    console.log(`✅ LLM confirmed story progression: ${confirmation.reason}`);
+                }
+            }
+            
+            // Fallback mechanism for incomplete responses
             // Ensure all required fields are present
             if (!response.image_prompt) {
                 logWarn('Game', 'Missing image_prompt in response, generating fallback');
@@ -714,8 +808,10 @@ export async function executeLLMCall(retries: number = 3): Promise<void> {
             const newMemories = response.new_memories || [];
             if (newMemories.length > 0) {
                 gameState.memories.push(...newMemories);
-                // Keep only last 10 salient story points
-                gameState.memories = gameState.memories.slice(-10);
+                // Keep only last 20 salient story points, summarize if needed
+                if (gameState.memories.length > 20) {
+                    summarizeOldMemories();
+                }
             }
 
             // Save story step to database
@@ -765,7 +861,7 @@ export async function executeLLMCall(retries: number = 3): Promise<void> {
                             lastAction.choice,
                             lastAction.outcome || 'Unknown',
                             response.story,
-                            response.image_prompt,
+                                                                response.image_prompt,
                             response.choices,
                             newMemories,
                             storyEntry.timestamp,
@@ -864,11 +960,34 @@ export async function executeLLMCall(retries: number = 3): Promise<void> {
     } catch (error) {
         console.error(`❌ executeLLMCall: Ollama LLM call failed after ${retries} retries:`, error);
         
-        // Try fallback prompt if this was a validation error
-        if (error instanceof Error && error.message.includes('Missing required fields')) {
-            logWarn('Game', 'Attempting fallback with simplified prompt...');
+        // Try fallback prompt if this was a validation error, summarization, or poor quality
+        if (error instanceof Error && (error.message.includes('Missing required fields') || error.message.includes('Story summarization detected') || error.message.includes('Poor story quality detected') || error.message.includes('LLM confirmed poor story progression'))) {
+            const isSummarization = error.message.includes('Story summarization detected');
+            const isPoorQuality = error.message.includes('Poor story quality detected') || error.message.includes('LLM confirmed poor story progression');
+            
+            let logMessage = 'Attempting fallback with simplified prompt...';
+            if (isSummarization) logMessage = 'Attempting fallback with anti-summarization prompt...';
+            else if (isPoorQuality) logMessage = 'Attempting fallback with enhanced story quality prompt...';
+            
+            logWarn('Game', logMessage);
+            
             try {
-                const fallbackResponse = await callLocalLLMWithRetry(fallbackPrompt, gameState.messageHistory, jsonFields, 1);
+                // Use specialized prompt based on the issue
+                let promptToUse = fallbackPrompt;
+                if (isSummarization) promptToUse = getAntiSummarizationPrompt();
+                else if (isPoorQuality) promptToUse = getEnhancedStoryQualityPrompt();
+                const fallbackResponse = await callLocalLLMWithRetry(promptToUse, gameState.messageHistory, jsonFields, 1);
+                
+                // Debug fallback choices structure
+                if (fallbackResponse && fallbackResponse.choices) {
+                    console.log('🔍 Game: Fallback choices from LLM:', fallbackResponse.choices);
+                    console.log('🔍 Game: Fallback choices type:', typeof fallbackResponse.choices);
+                    console.log('🔍 Game: Fallback is array:', Array.isArray(fallbackResponse.choices));
+                    fallbackResponse.choices.forEach((choice: any, index: number) => {
+                        console.log(`🔍 Game: Fallback choice ${index}:`, choice, 'Type:', typeof choice);
+                    });
+                }
+                
                 if (fallbackResponse && fallbackResponse.story) {
                     logInfo('Game', 'Fallback prompt succeeded, continuing with game');
                     
@@ -876,9 +995,9 @@ export async function executeLLMCall(retries: number = 3): Promise<void> {
                     let response = fallbackResponse;
                     
                     // Apply the same fallback mechanism
-                    if (!response.image_prompt) {
-                        response.image_prompt = `A scene showing: ${response.story.substring(0, 100)}...`;
-                    }
+                                if (!response.image_prompt) {
+                response.image_prompt = `A scene showing: ${response.story.substring(0, 100)}...`;
+            }
                     
                     // 🚨 CRITICAL: DO NOT CHANGE THIS LOGIC - Same bug as above!
                     // The LLM can return 2-4 choices. Only generate fallbacks if < 2 choices.
@@ -919,7 +1038,10 @@ export async function executeLLMCall(retries: number = 3): Promise<void> {
                     const newMemories = response.new_memories || [];
                     if (newMemories.length > 0) {
                         gameState.memories.push(...newMemories);
-                        gameState.memories = gameState.memories.slice(-10);
+                        // Keep only last 20 salient story points, summarize if needed
+                        if (gameState.memories.length > 20) {
+                            summarizeOldMemories();
+                        }
                     }
 
                     // Save story step to database
@@ -1112,7 +1234,7 @@ export async function updateGame(choice: string): Promise<void> {
 /**
  * Generate image asynchronously without blocking the UI
  */
-async function generateImageAsync(imagePrompt: string, storyEntry: StoryEntry): Promise<void> {
+export async function generateImageAsync(imagePrompt: string, storyEntry: StoryEntry): Promise<void> {
     try {
         const config = await loadConfig();
         if (config.stableDiffusion.url) {
@@ -1386,10 +1508,67 @@ export async function getStorySummaryContext(): Promise<string> {
 /**
  * Add salient story point manually
  */
-export function addMemory(memory: string): void {
+export async function addMemory(memory: string): Promise<void> {
     gameState.memories.push(memory);
-    // Keep only last 10 salient story points
-    gameState.memories = gameState.memories.slice(-10);
+    // Keep only last 20 salient story points, summarize if needed
+    if (gameState.memories.length > 20) {
+        summarizeOldMemories();
+    }
+    
+    // Save the new memory to the database if we have a session
+    if (gameState.sessionId) {
+        try {
+            const config = await loadConfig();
+            if (config.database.saveStorySteps) {
+                // Create a new story step entry for the manual memory
+                const stepNumber = (gameState.storyLog.length || 0) + 1;
+                const storyEntryId = generateUUID();
+                
+                // Save as a special "memory only" step
+                await saveStoryStep(
+                    gameState.sessionId,
+                    stepNumber,
+                    storyEntryId,
+                    'Manual Memory Addition',
+                    'Memory',
+                    `Added memory: ${memory}`,
+                    '', // No image prompt for manual memories
+                    [], // No choices for manual memories
+                    [memory], // The new memory
+                    Date.now()
+                );
+                
+                logInfo('Game', `Manual memory saved to database: ${memory}`);
+            }
+        } catch (error) {
+            logError('Game', 'Failed to save manual memory to database', error);
+            console.error('Failed to save manual memory to database:', error);
+        }
+    }
+    
+    // Notify UI of state change
+    if (typeof window !== 'undefined' && window.dispatchEvent) {
+        window.dispatchEvent(new CustomEvent('gameStateChanged', { detail: gameState }));
+    }
+}
+
+/**
+ * Summarize old memories when trimming is needed
+ */
+function summarizeOldMemories(): void {
+    if (gameState.memories.length <= 20) return;
+    
+    // Take the oldest memories (excluding the last 15 to keep recent ones)
+    const memoriesToSummarize = gameState.memories.slice(0, gameState.memories.length - 15);
+    const recentMemories = gameState.memories.slice(-15);
+    
+    // Create a summary of the old memories
+    const summaryMemory = `Summary of earlier events: ${memoriesToSummarize.join(' | ')}`;
+    
+    // Replace old memories with summary + recent memories
+    gameState.memories = [summaryMemory, ...recentMemories];
+    
+    logInfo('Game', `Summarized ${memoriesToSummarize.length} old memories into 1 summary memory`);
 }
 
 /**

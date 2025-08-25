@@ -558,6 +558,56 @@ export async function deleteStorySteps(sessionId: string): Promise<boolean> {
 }
 
 /**
+ * Update a story summary by session ID
+ */
+export async function updateStorySummary(sessionId: string, newSummary: string): Promise<boolean> {
+    try {
+        const database = getDatabase();
+        const updatedCount = await database.storySummaries
+            .where('session_id')
+            .equals(sessionId)
+            .modify({ summary: newSummary, updated_at: new Date() });
+        
+        if (updatedCount > 0) {
+            logInfo('Database', `Updated story summary for session ${sessionId} successfully`);
+            return true;
+        } else {
+            logInfo('Database', `No story summary found for session ${sessionId} to update`);
+            return false;
+        }
+        
+    } catch (error) {
+        logError('Database', `Failed to update story summary for session ${sessionId}`, error);
+        return false;
+    }
+}
+
+/**
+ * Update a specific story step by ID
+ */
+export async function updateStoryStep(stepId: number, updates: Partial<StoryStepRecord>): Promise<boolean> {
+    try {
+        const database = getDatabase();
+        const updatedCount = await database.storySteps
+            .where('id')
+            .equals(stepId)
+            .modify(updates);
+        
+        if (updatedCount > 0) {
+            logInfo('Database', `Updated story step ${stepId} successfully`);
+            return true;
+        } else {
+            logInfo('Database', `No story step found with ID ${stepId} to update`);
+            return false;
+        }
+        
+    } catch (error) {
+        logError('Database', `Failed to update story step ${stepId}`, error);
+        return false;
+    }
+}
+
+/**
  * Delete a specific story step by session ID and step number
  */
 export async function deleteSpecificStoryStep(sessionId: string, stepNumber: number): Promise<boolean> {

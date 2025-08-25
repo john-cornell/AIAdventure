@@ -289,6 +289,192 @@ export function validateLLMResponse(json: any, requiredFields: string[]): { vali
 }
 
 /**
+ * Detect if the AI is summarizing instead of continuing the story
+ */
+export function detectSummarization(json: any): { isSummarizing: boolean; reason: string } {
+    if (!json || !json.story) {
+        return { isSummarizing: false, reason: 'No story content to analyze' };
+    }
+    
+    const story = json.story.toLowerCase();
+    
+    // Common summarization indicators
+    const summaryKeywords = [
+        'initially', 'have grown', 'have acquired', 'have encountered', 'have discovered',
+        'their camaraderie has', 'they\'ve acquired', 'they\'ve encountered', 'they\'ve discovered',
+        'recently', 'since then', 'now', 'currently', 'despite the tension',
+        'alex has', 'rachel has', 'they have', 'both have'
+    ];
+    
+    // Check for repetitive past tense descriptions
+    const pastTensePatterns = [
+        /\bhave\s+\w+ed\b/g,  // "have discovered", "have encountered"
+        /\bhas\s+\w+ed\b/g,   // "has activated", "has planted"
+        /\bwere\s+\w+ing\b/g, // "were investigating", "were exploring"
+        /\bwas\s+\w+ing\b/g   // "was approaching", "was activating"
+    ];
+    
+    let summaryScore = 0;
+    
+    // Check for summary keywords
+    summaryKeywords.forEach(keyword => {
+        if (story.includes(keyword)) {
+            summaryScore += 1;
+        }
+    });
+    
+    // Check for past tense patterns
+    pastTensePatterns.forEach(pattern => {
+        const matches = story.match(pattern);
+        if (matches) {
+            summaryScore += matches.length * 0.5;
+        }
+    });
+    
+    // Check for repetitive structure (multiple "have" statements)
+    const haveCount = (story.match(/\bhave\b/g) || []).length;
+    if (haveCount > 3) {
+        summaryScore += haveCount - 2;
+    }
+    
+    // Check for "currently" or "now" followed by past events
+    if (story.includes('currently') || story.includes('now')) {
+        const afterCurrent = story.split(/(?:currently|now)/)[1];
+        if (afterCurrent && pastTensePatterns.some(pattern => pattern.test(afterCurrent))) {
+            summaryScore += 2;
+        }
+    }
+    
+    const isSummarizing = summaryScore >= 3;
+    const reason = isSummarizing 
+        ? `Detected summarization (score: ${summaryScore.toFixed(1)}). Contains summary keywords, past tense patterns, and repetitive structure.`
+        : `No summarization detected (score: ${summaryScore.toFixed(1)})`;
+    
+    return { isSummarizing, reason };
+}
+
+/**
+ * Detect if the story response is too short or incomplete
+ */
+export function detectPoorStoryQuality(json: any): { isPoorQuality: boolean; reason: string; score: number } {
+    if (!json || !json.story) {
+        return { isPoorQuality: true, reason: 'No story content', score: 0 };
+    }
+    
+    const story = json.story;
+    let qualityScore = 0;
+    const issues: string[] = [];
+    
+    // Check story length (too short = poor quality)
+    if (story.length < 100) {
+        qualityScore -= 3;
+        issues.push(`Story too short (${story.length} chars, need 100+)`);
+    } else if (story.length < 200) {
+        qualityScore -= 1;
+        issues.push(`Story somewhat short (${story.length} chars)`);
+    } else if (story.length >= 300) {
+        qualityScore += 2;
+    }
+    
+    // Check for incomplete sentences (ending with incomplete words)
+    const incompleteEndings = story.match(/\w+\s*$/);
+    if (incompleteEndings && incompleteEndings[0].length < 5) {
+        qualityScore -= 2;
+        issues.push('Story ends with incomplete sentence');
+    }
+    
+    // Check for abrupt endings (ending with dialogue or action)
+    const abruptEndings = story.match(/(['"][^'"]*$|\.\.\.$|\w+\s*$)/);
+    if (abruptEndings) {
+        qualityScore -= 1;
+        issues.push('Story has abrupt ending');
+    }
+    
+    // Check for meaningful content (not just setup)
+    const meaningfulContent = story.match(/\b(but|however|suddenly|then|next|meanwhile|finally|eventually)\b/gi);
+    if (meaningfulContent && meaningfulContent.length >= 2) {
+        qualityScore += 1;
+    }
+    
+    // Check for action or dialogue (not just description)
+    const hasAction = story.match(/\b(you|rachel|alex|mr\. thompson)\b/gi);
+    const hasDialogue = story.match(/['"][^'"]*['"]/);
+    if (hasAction && hasAction.length >= 2) {
+        qualityScore += 1;
+    }
+    if (hasDialogue) {
+        qualityScore += 1;
+    }
+    
+    // Check for story progression (not just status update)
+    const progressionWords = story.match(/\b(decide|choose|realize|notice|discover|find|see|hear|feel|think)\b/gi);
+    if (progressionWords && progressionWords.length >= 2) {
+        qualityScore += 1;
+    }
+    
+    const isPoorQuality = qualityScore < 0;
+    const reason = isPoorQuality 
+        ? `Poor story quality (score: ${qualityScore}): ${issues.join(', ')}`
+        : `Good story quality (score: ${qualityScore})`;
+    
+    return { isPoorQuality, reason, score: qualityScore };
+}
+
+/**
+ * Ask LLM to confirm if story actually progressed
+ */
+export async function confirmStoryProgression(
+    previousStep: string, 
+    playerChoice: string, 
+    newResponse: string
+): Promise<{ confirmed: boolean; reason: string }> {
+    try {
+        const prompt = `Previous: "${previousStep}"
+Choice: "${playerChoice}" 
+New: "${newResponse}"
+
+Did the story progress? Answer only: yes or no.`;
+
+        // Import the LLM call function
+        const { callLocalLLM } = await import('./ollama.js');
+        
+        // Call LLM for simple yes/no confirmation
+        const response = await callLocalLLM(prompt, [], [
+            { name: 'story', type: 'string' }
+        ]);
+
+        // Check for simple yes/no response
+        if (response && response.story) {
+            const answer = response.story.toLowerCase().trim();
+            if (answer.includes('yes') || answer.includes('yay')) {
+                return {
+                    confirmed: true,
+                    reason: 'LLM confirmed: Story progressed'
+                };
+            } else if (answer.includes('no') || answer.includes('nay')) {
+                return {
+                    confirmed: false,
+                    reason: 'LLM confirmed: No story progression'
+                };
+            }
+        }
+        
+        // Fallback if LLM response is unclear
+        return {
+            confirmed: true, // Default to allowing the story
+            reason: 'LLM response unclear, defaulting to allow progression'
+        };
+    } catch (error) {
+        console.error('Failed to confirm story progression with LLM:', error);
+        // Fallback to allowing the story if confirmation fails
+        return {
+            confirmed: true,
+            reason: 'LLM confirmation failed, defaulting to allow progression'
+        };
+    }
+}
+
+/**
  * Attempt to reconstruct missing fields with fallback values
  */
 export function reconstructMissingFields(json: any, requiredFields: string[]): any {

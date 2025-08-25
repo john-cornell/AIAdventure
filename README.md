@@ -2,15 +2,35 @@
 
 A local AI-powered text adventure game that uses Ollama for story generation and Stable Diffusion for scene visualization. Experience dynamic storytelling with AI-generated narratives and beautiful scene images.
 
+**Current Version**: 1.0.51 (Latest)
+
+**Latest Updates**:
+- 🤖 **LLM Story Progression Confirmation**: Simple yes/no validation when poor story quality is suspected
+- 📖 **Story Quality Validation**: Automatic detection and retry of poor quality, short, or incomplete story responses
+- 📜 **Auto-Scroll Story**: Automatic smooth scrolling to show new story content as it appears
+- 🚫 **Anti-Summarization**: Automatic detection and prevention of AI story summarization with intelligent retry
+- ✏️ **Content Editing**: Edit story summaries and steps directly from the management interface
+- 🧠 **Enhanced Memory System**: 20-memory limit with intelligent summarization
+- 🗑️ **Memory Management**: Add, edit, and delete AI memories
+- 📚 **Story Management**: Comprehensive session management with database persistence
+- 🔄 **Smart Memory Summarization**: Old memories are automatically condensed to preserve context
+
 ## 🌟 Features
 
 - **AI-Powered Storytelling**: Dynamic story generation using local LLMs via Ollama
 - **Scene Visualization**: Beautiful AI-generated images for each story scene using Stable Diffusion
 - **Local & Private**: Everything runs locally on your machine - no cloud dependencies
-- **Persistent Game State**: Save and load your adventures
+- **Persistent Game State**: Save and load your adventures with automatic database persistence
 - **Multiple AI Models**: Support for various Ollama models and SD models
 - **Real-time Settings**: Immediate configuration changes with auto-save
-- **Database Management**: Built-in database viewer and configuration management
+- **Advanced Database Management**: Built-in database viewer, configuration management, and data export/import
+- **Story Management System**: Comprehensive session management with summaries, steps, and memories
+- **Memory Management**: AI memory system with manual editing, summarization, and 20-memory limit
+- **Content Editing**: Edit story summaries and steps directly from the management interface
+- **Session Recovery**: Load any saved game session and continue from where you left off
+- **Story Quality Validation**: Automatic detection and retry of poor quality, short, or incomplete story responses
+- **Anti-Summarization Protection**: Automatic detection and prevention of AI story summarization with intelligent retry
+- **Auto-Scroll Story**: Smooth automatic scrolling to keep new story content visible
 
 ## 🛠️ Prerequisites
 
@@ -100,6 +120,15 @@ Navigate to `http://localhost:8000` in your browser.
 - **Multiple Endings**: Different choices lead to different story outcomes
 - **Export/Import**: Save and share your adventures
 
+### Story Management System
+- **Session Overview**: View all your saved game sessions with timestamps and step counts
+- **Story Summaries**: Read AI-generated summaries of your adventures
+- **Step-by-Step History**: Browse through every story step with choices and outcomes
+- **Memory Management**: View, add, edit, and delete AI memories (20-memory limit with smart summarization)
+- **Content Editing**: Edit story summaries and individual story steps directly
+- **Session Recovery**: Load any saved session and continue playing
+- **Data Export**: Backup your entire game database
+
 ## ⚙️ Configuration
 
 ### Ollama Settings
@@ -121,6 +150,14 @@ Navigate to `http://localhost:8000` in your browser.
 - **Story Summaries**: View and manage your adventure history
 - **Export/Import**: Backup and restore your game data
 
+### Memory Management
+- **AI Memory System**: The AI maintains context through story memories
+- **Memory Limit**: 20 memories with intelligent summarization when limit is exceeded
+- **Manual Memory Addition**: Add custom memories during gameplay
+- **Memory Editing**: View, edit, and delete individual memories
+- **Smart Summarization**: Old memories are automatically summarized to preserve context
+- **Session Persistence**: Memories are saved with each game session
+
 ## 🏗️ Project Structure
 
 ```
@@ -141,6 +178,24 @@ AIAdventure/
 ├── build-and-dev.ps1       # PowerShell build script
 └── README.md               # This file
 ```
+
+## ✏️ Content Editing
+
+### Story Summary Editor
+- **Direct Editing**: Click the "✏️ Edit" button to modify story summaries
+- **Real-time Updates**: Changes are saved immediately to the database
+- **Session Persistence**: All edits are preserved across game sessions
+
+### Story Step Editor
+- **Step-by-Step Editing**: Edit individual story steps and their content
+- **Database Integration**: All changes are automatically saved
+- **Content Management**: Modify story text, choices, and outcomes
+
+### Memory Editor
+- **Memory Management**: View all AI memories in a dedicated tab
+- **Manual Addition**: Add custom memories during gameplay
+- **Smart Deletion**: Remove unwanted memories with database persistence
+- **Context Preservation**: Memories are linked to specific story steps
 
 ## 🔧 Development
 
@@ -168,6 +223,12 @@ AIAdventure/
 - `typescript`: Type safety and modern JavaScript features
 - `tailwindcss`: Utility-first CSS framework
 
+### Database Schema
+- **Story Summaries**: Session metadata, summaries, and timestamps
+- **Story Steps**: Individual story entries with choices, outcomes, and memories
+- **Configuration Profiles**: User settings and preferences
+- **Memory System**: AI context memories linked to story steps
+
 ## 🐛 Troubleshooting
 
 ### Common Issues
@@ -191,6 +252,16 @@ AIAdventure/
 - Run `pnpm install` to ensure all dependencies are installed
 - Check `tsconfig.json` for proper configuration
 - Verify TypeScript version: `npx tsc --version`
+
+**"Memory editing not working"**
+- Ensure you have a loaded game session (not just viewing in Story Management)
+- Check that the game state is 'PLAYING' and has a session ID
+- Verify database permissions in your browser
+
+**"Story editing not saving"**
+- Check browser console for database errors
+- Ensure IndexedDB is enabled in your browser
+- Try refreshing the page and editing again
 
 ### Performance Tips
 - Use smaller/faster models for quicker responses

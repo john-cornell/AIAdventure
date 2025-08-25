@@ -787,6 +787,9 @@ function createStoryManagementOverlayHTML(): string {
                         <button id="story-tab-summary" class="story-tab-button py-2 px-1 border-b-2 border-transparent text-gray-400 hover:text-gray-300 font-medium">
                             📝 Story Summary
                         </button>
+                        <button id="story-tab-memories" class="story-tab-button py-2 px-1 border-b-2 border-transparent text-gray-400 hover:text-gray-300 font-medium">
+                            🧠 Current Memories
+                        </button>
                     </nav>
                 </div>
                 
@@ -823,9 +826,14 @@ function createStoryManagementOverlayHTML(): string {
                                 <div class="bg-gray-900 rounded-lg border border-gray-600 p-4">
                                     <h4 class="text-md font-semibold text-white mb-3 flex items-center justify-between">
                                         <span>📋 Story Summary</span>
-                                        <button id="delete-summary" class="bg-red-600 hover:bg-red-500 text-white px-2 py-1 rounded text-xs">
-                                            🗑️ Delete
-                                        </button>
+                                        <div class="flex gap-2">
+                                            <button id="edit-summary" class="bg-blue-600 hover:bg-blue-500 text-white px-2 py-1 rounded text-xs">
+                                                ✏️ Edit
+                                            </button>
+                                            <button id="delete-summary" class="bg-red-600 hover:bg-red-500 text-white px-2 py-1 rounded text-xs">
+                                                🗑️ Delete
+                                            </button>
+                                        </div>
                                     </h4>
                                     <div id="story-summary-container" class="text-sm text-gray-300 max-h-64 overflow-y-auto">
                                         <span class="text-gray-500">Select a session to view summary...</span>
@@ -836,9 +844,14 @@ function createStoryManagementOverlayHTML(): string {
                                 <div class="bg-gray-900 rounded-lg border border-gray-600 p-4">
                                     <h4 class="text-md font-semibold text-white mb-3 flex items-center justify-between">
                                         <span>📝 Story Steps</span>
-                                        <button id="delete-steps" class="bg-red-600 hover:bg-red-500 text-white px-2 py-1 rounded text-xs">
-                                            🗑️ Delete
-                                        </button>
+                                        <div class="flex gap-2">
+                                            <button id="edit-steps" class="bg-blue-600 hover:bg-blue-500 text-white px-2 py-1 rounded text-xs">
+                                                ✏️ Edit
+                                            </button>
+                                            <button id="delete-steps" class="bg-red-600 hover:bg-red-500 text-white px-2 py-1 rounded text-xs">
+                                                🗑️ Delete
+                                            </button>
+                                        </div>
                                     </h4>
                                     <div id="story-steps-container" class="text-sm text-gray-300 max-h-64 overflow-y-auto">
                                         <span class="text-gray-500">Select a session to view steps...</span>
@@ -868,6 +881,36 @@ function createStoryManagementOverlayHTML(): string {
                             
                             <div id="story-summary-display" class="text-sm text-gray-300 font-mono bg-gray-900 p-4 rounded border border-gray-600 max-h-96 overflow-y-auto">
                                 Loading story summaries...
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Memories Tab -->
+                    <div id="story-tab-content-memories" class="story-tab-content hidden">
+                        <div class="p-4 bg-gray-800 rounded-lg border border-gray-600">
+                            <div class="flex justify-between items-center mb-4">
+                                <h3 class="text-lg font-semibold text-white">Current Game Memories</h3>
+                                <div class="flex gap-2">
+                                    <button id="add-memory" class="bg-green-600 hover:bg-green-500 text-white px-4 py-2 rounded-lg disabled:bg-gray-500 disabled:cursor-not-allowed" disabled>
+                                        ➕ Add Memory
+                                    </button>
+                                    <button id="refresh-memories" class="bg-blue-600 hover:bg-blue-500 text-white px-4 py-2 rounded-lg">
+                                        🔄 Refresh
+                                    </button>
+                                    <button id="clear-memories" class="bg-red-600 hover:bg-red-500 text-white px-4 py-2 rounded-lg">
+                                        🗑️ Clear All
+                                    </button>
+                                </div>
+                            </div>
+                            
+                            <div class="mb-4">
+                                <label class="block text-sm font-medium text-gray-300 mb-2">
+                                    Memory Count: <span id="memory-count" class="text-indigo-400">0</span> / <span class="text-gray-400">20</span>
+                                </label>
+                            </div>
+                            
+                            <div id="memories-display" class="text-sm text-gray-300 font-mono bg-gray-900 p-4 rounded border border-gray-600 max-h-96 overflow-y-auto">
+                                <span class="text-gray-500">Loading current memories...</span>
                             </div>
                         </div>
                     </div>
@@ -1094,6 +1137,30 @@ function switchSettingsTab(tabId: string): void {
 }
 
 /**
+ * Get the current story entry for image regeneration
+ */
+function getCurrentStoryEntry(): any {
+    try {
+        // Get the current game state
+        const gameState = getGameState();
+        console.log('🔍 getCurrentStoryEntry - Game state:', gameState);
+        
+        if (gameState && gameState.storyLog && gameState.storyLog.length > 0) {
+            const latestEntry = gameState.storyLog[gameState.storyLog.length - 1];
+            console.log('🔍 getCurrentStoryEntry - Latest entry:', latestEntry);
+            console.log('🔍 getCurrentStoryEntry - Available properties:', Object.keys(latestEntry));
+            // Return the most recent story entry
+            return latestEntry;
+        }
+        console.warn('⚠️ getCurrentStoryEntry - No story log or empty story log');
+        return null;
+    } catch (error) {
+        console.error('Failed to get current story entry:', error);
+        return null;
+    }
+}
+
+/**
  * Setup event listeners
  */
 function setupEventListeners(): void {
@@ -1234,6 +1301,13 @@ function setupEventListeners(): void {
         // Also update history display if history tab is active
         if (isHistoryTabActive()) {
             updateHistoryDisplay();
+        }
+        
+        // Update memories display if memories tab is active in story management
+        const memoriesTab = document.getElementById('story-tab-content-memories');
+        if (memoriesTab && !memoriesTab.classList.contains('hidden')) {
+            updateAddMemoryButtonState();
+            loadCurrentMemories();
         }
     });
 }
@@ -2799,43 +2873,52 @@ function showGameScreen(): void {
                 <div class="flex justify-between items-center mb-4">
                     <div class="flex items-center gap-3">
                         <button id="settings-button" 
-                                class="w-10 h-10 bg-gray-800/50 rounded-full hover:bg-gray-700/70 transition-colors flex items-center justify-center text-gray-400 hover:text-white">
+                                class="w-10 h-10 bg-gray-800/50 rounded-full hover:bg-gray-700/70 transition-colors flex items-center justify-center text-gray-400 hover:text-white"
+                                title="Settings - Configure game options, LLM models, and image generation">
                             ⚙️
                         </button>
                         <button id="export-button" 
-                                class="w-10 h-10 bg-gray-800/50 rounded-full hover:bg-gray-700/70 transition-colors flex items-center justify-center text-gray-400 hover:text-white">
+                                class="w-10 h-10 bg-gray-800/50 rounded-full hover:bg-gray-700/70 transition-colors flex items-center justify-center text-gray-400 hover:text-white"
+                                title="Export Game - Save current adventure to JSON file">
                             💾
                         </button>
                         <button id="reset-button" 
-                                class="w-10 h-10 bg-gray-800/50 rounded-full hover:bg-gray-700/70 transition-colors flex items-center justify-center text-gray-400 hover:text-white">
+                                class="w-10 h-10 bg-gray-800/50 rounded-full hover:bg-gray-700/70 transition-colors flex items-center justify-center text-gray-400 hover:text-white"
+                                title="Reset Game - Start a new adventure (current progress will be lost)">
                             🔄
+                        </button>
+                        <button id="refresh-image-button" 
+                                class="w-10 h-10 bg-gray-800/50 rounded-full hover:bg-gray-700/70 transition-colors flex items-center justify-center text-gray-400 hover:text-white"
+                                title="Refresh Image - Generate a new image for the current scene">
+                            🖼️
                         </button>
                         <button id="auto-summarize-button" 
                                 class="w-10 h-10 bg-gray-800/50 rounded-full hover:bg-gray-700/70 transition-colors flex items-center justify-center text-gray-400 hover:text-white"
-                                title="Auto-summarize steps and continue from summary">
+                                title="Auto-summarize - Condense story steps and continue from summary">
                             📋
                         </button>
                         <button id="toggle-logs-button" 
-                                class="w-10 h-10 bg-gray-800/50 rounded-full hover:bg-gray-700/70 transition-colors flex items-center justify-center text-gray-400 hover:text-white">
+                                class="w-10 h-10 bg-gray-800/50 rounded-full hover:bg-gray-700/70 transition-colors flex items-center justify-center text-gray-400 hover:text-white"
+                                title="Toggle Logs - Show/hide detailed game logs and debugging info">
                             📝
                         </button>
                         <button id="story-management-button" 
                                 class="w-10 h-10 bg-gray-800/50 rounded-full hover:bg-gray-700/70 transition-colors flex items-center justify-center text-gray-400 hover:text-white"
-                                title="Story Management - View and manage story sessions">
+                                title="Story Management - View, load, and manage story sessions">
                             📚
                         </button>
 
                     </div>
                     <div class="flex items-center gap-4">
-                        <div class="flex items-center gap-2">
+                        <div class="flex items-center gap-2" title="Ollama LLM Connection Status - Green: Connected, Red: Error, Gray: Unknown">
                             <div id="menu-ollama-status" class="w-3 h-3 rounded-full bg-gray-500"></div>
                             <span class="text-gray-400 text-sm">Ollama</span>
                         </div>
-                        <div class="flex items-center gap-2">
+                        <div class="flex items-center gap-2" title="Stable Diffusion Connection Status - Green: Connected, Red: Error, Gray: Unknown">
                             <div id="menu-sd-status" class="w-3 h-3 rounded-full bg-gray-500"></div>
                             <span class="text-gray-400 text-sm">SD</span>
                         </div>
-                        <div class="flex items-center gap-2">
+                        <div class="flex items-center gap-2" title="LLM Context Usage - Shows how much of the context limit is being used">
                             <div id="context-usage-indicator" class="w-3 h-3 rounded-full bg-gray-500"></div>
                             <span id="context-usage-text" class="text-gray-400 text-sm">Context</span>
                         </div>
@@ -2844,10 +2927,12 @@ function showGameScreen(): void {
                 
                 <!-- Tabs -->
                 <div class="flex border-b border-gray-700 mb-4">
-                    <button class="tab-button py-2 px-4 text-indigo-400 border-b-2 border-indigo-400 font-semibold transition-colors" data-tab="story">
+                    <button class="tab-button py-2 px-4 text-indigo-400 border-b-2 border-indigo-400 font-semibold transition-colors" data-tab="story"
+                            title="Story Tab - View current story content and make choices">
                         Story
                     </button>
-                    <button class="tab-button py-2 px-4 text-gray-500 hover:text-gray-300 font-semibold transition-colors" data-tab="history">
+                    <button class="tab-button py-2 px-4 text-gray-500 hover:text-gray-300 font-semibold transition-colors" data-tab="history"
+                            title="History Tab - View all previous actions and choices made">
                         History
                     </button>
                 </div>
@@ -2870,9 +2955,11 @@ function showGameScreen(): void {
                         <input type="text" id="custom-action-input" 
                                class="flex-grow bg-gray-900/50 border border-gray-600 rounded-lg px-4 py-2 text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-indigo-500 transition-all" 
                                placeholder="Or, type your own action..."
-                               autocomplete="off">
+                               autocomplete="off"
+                               title="Custom Action Input - Type your own action instead of using the provided choices">
                         <button type="submit" id="custom-action-button" 
-                                class="bg-indigo-600 hover:bg-indigo-500 text-white font-bold py-2 px-6 rounded-lg transition-colors duration-300 flex items-center gap-2">
+                                class="bg-indigo-600 hover:bg-indigo-500 text-white font-bold py-2 px-6 rounded-lg transition-colors duration-300 flex items-center gap-2"
+                                title="Send Custom Action - Submit your custom action to continue the story">
                             <span>📤</span> Send
                         </button>
                     </form>
@@ -2884,11 +2971,13 @@ function showGameScreen(): void {
                         <h3 class="text-lg font-semibold text-white">📝 Live Logs</h3>
                         <div class="flex gap-2">
                             <button id="clear-logs-button" 
-                                    class="bg-red-600 hover:bg-red-500 text-white px-3 py-1 rounded text-sm">
+                                    class="bg-red-600 hover:bg-red-500 text-white px-3 py-1 rounded text-sm"
+                                    title="Clear Logs - Remove all log entries and start fresh">
                                 🗑️ Clear
                             </button>
                             <button id="close-logs-button" 
-                                    class="bg-gray-600 hover:bg-gray-500 text-white px-3 py-1 rounded text-sm">
+                                    class="bg-gray-600 hover:bg-gray-500 text-white px-3 py-1 rounded text-sm"
+                                    title="Close Logs - Hide the logging panel">
                                 ✕ Close
                             </button>
                         </div>
@@ -2907,6 +2996,7 @@ function showGameScreen(): void {
     // Add event listeners
     const exportBtn = document.getElementById('export-button');
     const resetBtn = document.getElementById('reset-button');
+    const refreshImageBtn = document.getElementById('refresh-image-button');
     const autoSummarizeBtn = document.getElementById('auto-summarize-button');
     const settingsBtn = document.getElementById('settings-button');
     const customActionForm = document.getElementById('custom-action-form') as HTMLFormElement;
@@ -2914,6 +3004,36 @@ function showGameScreen(): void {
     
     if (exportBtn) {
         exportBtn.addEventListener('click', () => exportGame());
+    }
+    
+    if (refreshImageBtn) {
+        refreshImageBtn.addEventListener('click', async () => {
+            try {
+                const currentStoryEntry = getCurrentStoryEntry();
+                if (currentStoryEntry && (currentStoryEntry.image_prompt || currentStoryEntry.imagePrompt)) {
+                    const imagePrompt = currentStoryEntry.image_prompt || currentStoryEntry.imagePrompt;
+                    showMessage('🔄 Regenerating image...', 'success');
+                    (refreshImageBtn as HTMLButtonElement).disabled = true;
+                    refreshImageBtn.textContent = '⏳';
+                    refreshImageBtn.title = 'Generating...';
+                    
+                    // Import and call the image generation function
+                    const { generateImageAsync } = await import('./game.js');
+                    await generateImageAsync(imagePrompt, currentStoryEntry);
+                    
+                    showMessage('✅ Image refreshed successfully!', 'success');
+                } else {
+                    showMessage('No image prompt available for current scene', 'error');
+                }
+            } catch (error) {
+                console.error('Failed to refresh image:', error);
+                showMessage('Failed to refresh image', 'error');
+            } finally {
+                (refreshImageBtn as HTMLButtonElement).disabled = false;
+                refreshImageBtn.textContent = '🖼️';
+                refreshImageBtn.title = 'Refresh current scene image';
+            }
+        });
     }
     
     if (settingsBtn) {
@@ -3136,20 +3256,62 @@ function updateStoryDisplay(): void {
         
         // Add choices for the latest entry
         if (index === gameState.storyLog.length - 1 && entry.choices.length > 0) {
-            entry.choices.forEach(choice => {
+            console.log('🔍 Processing choices:', entry.choices);
+            entry.choices.forEach((choice: any, choiceIndex) => {
+                console.log(`🔍 Choice ${choiceIndex}:`, choice, 'Type:', typeof choice);
+                
                 const choiceBtn = document.createElement('button');
                 choiceBtn.className = 'choice-button bg-gray-700 hover:bg-gray-600 text-white p-4 rounded-lg transition-colors duration-300 text-left font-medium';
                 
-                // Since choices are strings, just use the choice directly
-                choiceBtn.textContent = choice;
+                // Handle both string and object choices
+                let choiceText = '';
+                if (typeof choice === 'string') {
+                    choiceText = choice;
+                } else if (choice && typeof choice === 'object') {
+                    // If it's an object, try to extract text property or stringify
+                    if (choice.text) {
+                        choiceText = choice.text;
+                    } else if (choice.choice) {
+                        choiceText = choice.choice;
+                    } else if (choice.description) {
+                        choiceText = choice.description;
+                    } else {
+                        choiceText = JSON.stringify(choice);
+                    }
+                } else {
+                    choiceText = String(choice);
+                }
+                
+                choiceBtn.textContent = choiceText;
                 
                 choicesContainer.appendChild(choiceBtn);
             });
         }
     });
     
-    // Scroll to bottom
-    storyContent.scrollTop = storyContent.scrollHeight;
+    // Auto-scroll to bottom with smooth animation
+    autoScrollToBottom(storyContent);
+}
+
+/**
+ * Auto-scroll element to bottom with smooth animation
+ */
+function autoScrollToBottom(element: HTMLElement): void {
+    if (!element) return;
+    
+    // Use requestAnimationFrame for smooth scrolling
+    requestAnimationFrame(() => {
+        // Smooth scroll to bottom
+        element.scrollTo({
+            top: element.scrollHeight,
+            behavior: 'smooth'
+        });
+        
+        // Fallback for browsers that don't support smooth scrolling
+        if (!('scrollBehavior' in document.documentElement.style)) {
+            element.scrollTop = element.scrollHeight;
+        }
+    });
 }
 
 /**
@@ -3206,7 +3368,7 @@ function updateHistoryDisplay(): void {
     });
     
     // Auto-scroll to bottom when new content is added
-    historyContent.scrollTop = historyContent.scrollHeight;
+    autoScrollToBottom(historyContent);
 }
 
 /**
@@ -3493,6 +3655,14 @@ function switchStoryManagementTab(tabId: string): void {
     if (targetContent) {
         targetContent.classList.remove('hidden');
         targetContent.classList.add('active');
+        
+        // Load memories data if memories tab is selected
+        if (tabName === 'memories') {
+            console.log('🧠 Memories tab selected, loading memories...');
+            console.log('🧠 Current game state before loading:', getGameState());
+            updateAddMemoryButtonState();
+            loadCurrentMemories();
+        }
     }
     
     // Activate selected tab button
@@ -3776,6 +3946,20 @@ function setupStoryManagementOverlayEventListeners(): void {
         allButtons.forEach(btn => console.log('  -', btn.id, btn));
     }
     
+    // Edit summary button
+    const editSummaryBtn = document.getElementById('edit-summary');
+    if (editSummaryBtn) {
+        editSummaryBtn.addEventListener('click', () => {
+            const sessionSelector = document.getElementById('story-session-selector') as HTMLSelectElement;
+            const sessionId = sessionSelector.value;
+            if (sessionId) {
+                editStorySummary(sessionId);
+            } else {
+                showMessage('Please select a session first', 'error');
+            }
+        });
+    }
+    
     // Delete summary button
     const deleteSummaryBtn = document.getElementById('delete-summary');
     if (deleteSummaryBtn) {
@@ -3784,6 +3968,20 @@ function setupStoryManagementOverlayEventListeners(): void {
             const sessionId = sessionSelector.value;
             if (sessionId) {
                 deleteSessionData(sessionId);
+            } else {
+                showMessage('Please select a session first', 'error');
+            }
+        });
+    }
+    
+    // Edit steps button
+    const editStepsBtn = document.getElementById('edit-steps');
+    if (editStepsBtn) {
+        editStepsBtn.addEventListener('click', () => {
+            const sessionSelector = document.getElementById('story-session-selector') as HTMLSelectElement;
+            const sessionId = sessionSelector.value;
+            if (sessionId) {
+                editStorySteps(sessionId);
             } else {
                 showMessage('Please select a session first', 'error');
             }
@@ -3800,6 +3998,43 @@ function setupStoryManagementOverlayEventListeners(): void {
                 deleteSessionData(sessionId);
             } else {
                 showMessage('Please select a session first', 'error');
+            }
+        });
+    }
+    
+    // Memories tab buttons
+    const addMemoryBtn = document.getElementById('add-memory');
+    if (addMemoryBtn) {
+        addMemoryBtn.addEventListener('click', async () => {
+            await showAddMemoryDialog();
+        });
+    }
+    
+    const refreshMemoriesBtn = document.getElementById('refresh-memories');
+    if (refreshMemoriesBtn) {
+        refreshMemoriesBtn.addEventListener('click', async () => {
+            await loadCurrentMemories();
+            showMessage('Memories refreshed', 'success');
+        });
+    }
+    
+    const clearMemoriesBtn = document.getElementById('clear-memories');
+    if (clearMemoriesBtn) {
+        clearMemoriesBtn.addEventListener('click', () => {
+            if (confirm('Are you sure you want to clear all memories? This action cannot be undone.')) {
+                try {
+                    // Get current game state and clear memories
+                    const gameState = getGameState();
+                    updateGameState({ memories: [] });
+                    
+                    // Refresh the memories display
+                    loadCurrentMemories();
+                    
+                    showMessage('All memories cleared successfully', 'success');
+                } catch (error) {
+                    console.error('Failed to clear memories:', error);
+                    showMessage('Failed to clear memories', 'error');
+                }
             }
         });
     }
@@ -3827,6 +4062,8 @@ async function loadSessionData(sessionId: string): Promise<void> {
             if (summary) {
                 summaryContainer.innerHTML = `<div class="text-gray-300">${summary.summary}</div>`;
                 console.log('Summary content updated');
+                // Auto-scroll to bottom of summary
+                autoScrollToBottom(summaryContainer);
             } else {
                 summaryContainer.innerHTML = '<span class="text-gray-500">No summary found for this session</span>';
                 console.log('No summary found for session');
@@ -3848,6 +4085,9 @@ async function loadSessionData(sessionId: string): Promise<void> {
                     
                     // Add event listeners for delete step buttons
                     setupDeleteStepEventListeners(stepsContainer, sessionId);
+                    
+                    // Auto-scroll to bottom of steps
+                    autoScrollToBottom(stepsContainer);
                 } else {
                     stepsContainer.innerHTML = '<span class="text-gray-500">No story steps found for this session</span>';
                 }
@@ -3927,6 +4167,21 @@ async function loadGameFromSession(sessionId: string): Promise<void> {
         // Reconstruct the game state from story steps
         console.log('🔍 About to create reconstructedGameState with sessionId:', sessionId);
         
+        // Collect all memories from all story steps
+        const allMemories: string[] = [];
+        storySteps.forEach((step, index) => {
+            console.log(`🔍 Step ${index + 1} - new_memories:`, step.new_memories);
+            if (step.new_memories && step.new_memories.length > 0) {
+                allMemories.push(...step.new_memories);
+                console.log(`✅ Added ${step.new_memories.length} memories from step ${index + 1}`);
+            } else {
+                console.log(`⚠️ Step ${index + 1} has no new_memories or empty array`);
+            }
+        });
+        
+        console.log('🔍 Collected memories from story steps:', allMemories);
+        console.log('🔍 Total memories found:', allMemories.length);
+        
         const reconstructedGameState = {
             sessionId: sessionId, // Include the session ID for continuity
             messageHistory: [],
@@ -3942,7 +4197,7 @@ async function loadGameFromSession(sessionId: string): Promise<void> {
                 outcome: step.outcome,
                 timestamp: step.timestamp
             })),
-            memories: storySteps.flatMap(step => step.new_memories),
+            memories: allMemories,
             currentState: 'PLAYING'
         };
         
@@ -3961,15 +4216,50 @@ async function loadGameFromSession(sessionId: string): Promise<void> {
         console.log('🔍 Session ID after reset:', getGameState().sessionId);
         
         console.log('📥 Importing reconstructed game data...');
+        console.log('📥 Reconstructed memories before import:', reconstructedGameState.memories);
+        console.log('📥 Reconstructed memories length:', reconstructedGameState.memories?.length || 0);
+        
         // Import the reconstructed data
         importGame(reconstructedGameState);
         console.log('✅ Game data imported successfully');
-        console.log('🔍 Session ID after import:', getGameState().sessionId);
+        
+        // Check memories after import
+        const importedGameState = getGameState();
+        console.log('🔍 Session ID after import:', importedGameState.sessionId);
+        console.log('🔍 Memories after import:', importedGameState.memories);
+        console.log('🔍 Memories length after import:', importedGameState.memories?.length || 0);
         
         console.log('🚪 Closing story management overlay...');
         // Close the overlay and show success message
         hideStoryManagementOverlay();
         console.log('✅ Overlay closed');
+        
+        // Regenerate image for the current scene
+        try {
+            // Wait a moment for the game state to be fully updated
+            await new Promise(resolve => setTimeout(resolve, 100));
+            
+            const { generateImageAsync } = await import('./game.js');
+            const currentStoryEntry = getCurrentStoryEntry();
+            console.log('🔍 Current story entry for image regeneration:', currentStoryEntry);
+            
+            if (currentStoryEntry && (currentStoryEntry.image_prompt || currentStoryEntry.imagePrompt)) {
+                const imagePrompt = currentStoryEntry.image_prompt || currentStoryEntry.imagePrompt;
+                console.log('🖼️ Regenerating image for loaded scene...');
+                console.log('🖼️ Image prompt:', imagePrompt);
+                await generateImageAsync(imagePrompt, currentStoryEntry);
+                console.log('✅ Image regenerated successfully for loaded scene');
+            } else {
+                console.warn('⚠️ No image prompt available for loaded scene');
+                console.warn('⚠️ Current story entry:', currentStoryEntry);
+                if (currentStoryEntry) {
+                    console.warn('⚠️ Available properties:', Object.keys(currentStoryEntry));
+                }
+            }
+        } catch (error) {
+            console.warn('⚠️ Failed to regenerate image for loaded scene:', error);
+        }
+        
         showMessage('Game loaded successfully from session!', 'success');
         
     } catch (error) {
@@ -4846,14 +5136,20 @@ async function deleteLatestStepAndRedraw(sessionId: string, stepNumber: number):
             return;
         }
         
-        // Delete the step from database by filtering it out
-        // Since there's no individual step deletion, we'll need to reconstruct without this step
-        console.log(`🗑️ Step ${stepNumber} will be removed from game state`);
+        // Delete the step from database using the new deleteSpecificStoryStep function
+        const { deleteSpecificStoryStep } = await import('./database.js');
+        const deleteSuccess = await deleteSpecificStoryStep(sessionId, stepNumber);
         
-        console.log(`✅ Step ${stepNumber} deleted successfully`);
+        if (!deleteSuccess) {
+            showMessage(`Failed to delete step ${stepNumber} from database`, 'error');
+            return;
+        }
+        
+        console.log(`✅ Step ${stepNumber} deleted successfully from database`);
         
         // Reconstruct game state from remaining steps (excluding the deleted step)
-        const remainingSteps = allSteps.filter(step => step.step_number < stepNumber);
+        // Note: We need to get the steps again after deletion to ensure we have the current state
+        const remainingSteps = await loadStorySteps(sessionId);
         
         if (remainingSteps.length === 0) {
             showMessage('No steps remaining after deletion', 'error');
@@ -4899,9 +5195,19 @@ async function deleteLatestStepAndRedraw(sessionId: string, stepNumber: number):
         // Show success message
         showMessage(`Step ${stepNumber} deleted successfully! Game continues from step ${remainingSteps.length}`, 'success');
         
-        // TODO: Regenerate image for the current step
-        // Note: Image regeneration requires the generateImageAsync function to be exported from game.ts
-        console.log('🖼️ Image regeneration skipped - function not exported');
+        // Regenerate image for the current step
+        try {
+            const { generateImageAsync } = await import('./game.js');
+            const currentStoryEntry = getCurrentStoryEntry();
+            if (currentStoryEntry && (currentStoryEntry.image_prompt || currentStoryEntry.imagePrompt)) {
+                const imagePrompt = currentStoryEntry.image_prompt || currentStoryEntry.imagePrompt;
+                console.log('🖼️ Regenerating image for current scene...');
+                await generateImageAsync(imagePrompt, currentStoryEntry);
+                console.log('✅ Image regenerated successfully');
+            }
+        } catch (error) {
+            console.warn('⚠️ Failed to regenerate image:', error);
+        }
         
     } catch (error) {
         console.error('❌ Error deleting latest step:', error);
@@ -4974,6 +5280,20 @@ async function deleteIndividualStep(sessionId: string, stepNumber: number): Prom
         
         // Refresh the story management display
         await loadAndDisplaySummaryAndSteps(sessionId);
+        
+        // Regenerate image for the current step
+        try {
+            const { generateImageAsync } = await import('./game.js');
+            const currentStoryEntry = getCurrentStoryEntry();
+            if (currentStoryEntry && (currentStoryEntry.image_prompt || currentStoryEntry.imagePrompt)) {
+                const imagePrompt = currentStoryEntry.image_prompt || currentStoryEntry.imagePrompt;
+                console.log('🖼️ Regenerating image for current scene...');
+                await generateImageAsync(imagePrompt, currentStoryEntry);
+                console.log('✅ Image regenerated successfully');
+            }
+        } catch (error) {
+            console.warn('⚠️ Failed to regenerate image:', error);
+        }
         
         // Show success message
         showMessage(`Step ${stepNumber} deleted successfully! ${remainingSteps.length} steps remaining.`, 'success');
@@ -5078,5 +5398,421 @@ async function backupDatabase(): Promise<void> {
     } catch (error) {
         console.error('Failed to create database backup:', error);
         showMessage('Failed to create database backup', 'error');
+    }
+}
+
+/**
+ * Update the add memory button state based on game status
+ */
+function updateAddMemoryButtonState(): void {
+    const addMemoryBtn = document.getElementById('add-memory') as HTMLButtonElement;
+    if (!addMemoryBtn) return;
+    
+    const gameState = getGameState();
+    const isGameLoaded = gameState.currentState === 'PLAYING' && gameState.sessionId;
+    
+    if (isGameLoaded) {
+        addMemoryBtn.disabled = false;
+        addMemoryBtn.className = 'bg-green-600 hover:bg-green-500 text-white px-4 py-2 rounded-lg disabled:bg-gray-500 disabled:cursor-not-allowed';
+        addMemoryBtn.title = 'Add a new memory to the current game';
+    } else {
+        addMemoryBtn.disabled = true;
+        addMemoryBtn.className = 'bg-gray-500 cursor-not-allowed text-white px-4 py-2 rounded-lg disabled:bg-gray-500 disabled:cursor-not-allowed';
+        addMemoryBtn.title = 'Load a game first to add memories';
+    }
+}
+
+/**
+ * Load and display current game memories
+ */
+async function loadCurrentMemories(): Promise<void> {
+    try {
+        const memoriesDisplay = document.getElementById('memories-display');
+        const memoryCount = document.getElementById('memory-count');
+        
+        if (!memoriesDisplay || !memoryCount) {
+            console.error('Memories display elements not found');
+            return;
+        }
+        
+        // Check if we're in story management and have a selected session
+        const sessionSelector = document.getElementById('story-session-selector') as HTMLSelectElement;
+        if (sessionSelector && sessionSelector.value) {
+            // Load memories from the selected session in the database
+            console.log('🧠 Loading memories from selected session:', sessionSelector.value);
+            await loadMemoriesFromSession(sessionSelector.value);
+        } else {
+            // Fall back to current game state
+            const gameState = getGameState();
+            const memories = gameState.memories || [];
+            
+            console.log('🔍 loadCurrentMemories - Game state:', gameState);
+            console.log('🔍 loadCurrentMemories - Memories array:', memories);
+            console.log('🔍 loadCurrentMemories - Memories length:', memories.length);
+            
+            // Update memory count
+            memoryCount.textContent = memories.length.toString();
+            
+            if (memories.length === 0) {
+                const gameState = getGameState();
+                if (gameState.currentState === 'MENU') {
+                    memoriesDisplay.innerHTML = '<span class="text-gray-500">No game loaded. Load a game first to view or add memories.</span>';
+                } else {
+                    memoriesDisplay.innerHTML = '<span class="text-gray-500">No memories have been created yet. Memories are generated as you play the story.</span>';
+                }
+                return;
+            }
+            
+            // Format memories for display
+            const memoriesHTML = memories.map((memory, index) => `
+                <div class="mb-3 p-3 bg-gray-800 rounded border border-gray-600">
+                    <div class="flex justify-between items-start">
+                        <div class="flex-1">
+                            <div class="text-indigo-400 font-medium mb-1">Memory ${index + 1}</div>
+                            <div class="text-gray-300">${memory}</div>
+                        </div>
+                        <button class="delete-memory-btn ml-2 bg-red-600 hover:bg-red-500 text-white px-2 py-1 rounded text-xs" data-index="${index}">
+                            🗑️
+                        </button>
+                    </div>
+                </div>
+            `).join('');
+            
+            memoriesDisplay.innerHTML = memoriesHTML;
+            
+            // Add event listeners for delete memory buttons
+            setupDeleteMemoryEventListeners();
+            
+            // Auto-scroll to bottom of memories display
+            autoScrollToBottom(memoriesDisplay);
+        }
+        
+    } catch (error) {
+        console.error('Failed to load current memories:', error);
+        const memoriesDisplay = document.getElementById('memories-display');
+        if (memoriesDisplay) {
+            memoriesDisplay.innerHTML = '<span class="text-red-500">Error loading memories</span>';
+        }
+    }
+}
+
+/**
+ * Load memories from a specific session in the database
+ */
+async function loadMemoriesFromSession(sessionId: string): Promise<void> {
+    try {
+        const memoriesDisplay = document.getElementById('memories-display');
+        const memoryCount = document.getElementById('memory-count');
+        
+        if (!memoriesDisplay || !memoryCount) {
+            console.error('Memories display elements not found');
+            return;
+        }
+        
+        console.log('🧠 Loading memories from session:', sessionId);
+        
+        // Load story steps from the database
+        const { loadStorySteps } = await import('./database.js');
+        const storySteps = await loadStorySteps(sessionId);
+        
+        // Collect all memories from all story steps
+        const allMemories: string[] = [];
+        storySteps.forEach((step, index) => {
+            console.log(`🧠 Step ${index + 1} - new_memories:`, step.new_memories);
+            if (step.new_memories && step.new_memories.length > 0) {
+                allMemories.push(...step.new_memories);
+                console.log(`✅ Added ${step.new_memories.length} memories from step ${index + 1}`);
+            }
+        });
+        
+        console.log('🧠 Total memories collected from session:', allMemories);
+        console.log('🧠 Total memories count:', allMemories.length);
+        
+        // Update memory count
+        memoryCount.textContent = allMemories.length.toString();
+        
+        if (allMemories.length === 0) {
+            memoriesDisplay.innerHTML = '<span class="text-gray-500">No memories found in this session. Memories are generated as you play the story.</span>';
+            return;
+        }
+        
+        // Format memories for display
+        const memoriesHTML = allMemories.map((memory, index) => `
+            <div class="mb-3 p-3 bg-gray-800 rounded border border-gray-600">
+                <div class="flex justify-between items-start">
+                    <div class="flex-1">
+                        <div class="text-indigo-400 font-medium mb-1">Memory ${index + 1}</div>
+                        <div class="text-gray-300">${memory}</div>
+                    </div>
+                    <button class="delete-memory-btn ml-2 bg-red-600 hover:bg-red-500 text-white px-2 py-1 rounded text-xs" data-index="${index}">
+                        🗑️
+                    </button>
+                </div>
+            </div>
+        `).join('');
+        
+        memoriesDisplay.innerHTML = memoriesHTML;
+        
+        // Add event listeners for delete memory buttons
+        setupDeleteMemoryEventListeners();
+        
+        // Auto-scroll to bottom of memories display
+        autoScrollToBottom(memoriesDisplay);
+        
+    } catch (error) {
+        console.error('Failed to load memories from session:', error);
+        const memoriesDisplay = document.getElementById('memories-display');
+        if (memoriesDisplay) {
+            memoriesDisplay.innerHTML = '<span class="text-red-500">Error loading memories from session</span>';
+        }
+    }
+}
+
+/**
+ * Show dialog to add a new memory
+ */
+async function showAddMemoryDialog(): Promise<void> {
+    const memoryText = prompt('Enter the memory you want to add:');
+    if (memoryText && memoryText.trim()) {
+        try {
+            // Import and call the addMemory function from game module
+            const { addMemory } = await import('./game.js');
+            await addMemory(memoryText.trim());
+            showMessage('Memory added successfully!', 'success');
+            
+            // Refresh the memories display
+            await loadCurrentMemories();
+        } catch (error) {
+            console.error('Failed to add memory:', error);
+            showMessage('Failed to add memory', 'error');
+        }
+    }
+}
+
+/**
+ * Edit story summary
+ */
+async function editStorySummary(sessionId: string): Promise<void> {
+    try {
+        // Get current summary
+        const sessionData = await getGameSessionData(sessionId);
+        const summary = sessionData.storySummaries.find((s: any) => s.session_id === sessionId);
+        
+        if (!summary) {
+            showMessage('No summary found for this session', 'error');
+            return;
+        }
+        
+        // Create edit dialog
+        const currentSummary = summary.summary || '';
+        const newSummary = prompt('Edit story summary:', currentSummary);
+        
+        if (newSummary !== null && newSummary !== currentSummary) {
+            // Update the summary in the database
+            const { updateStorySummary } = await import('./database.js');
+            const success = await updateStorySummary(sessionId, newSummary);
+            
+            if (success) {
+                showMessage('Story summary updated successfully!', 'success');
+                // Refresh the display
+                await loadSessionData(sessionId);
+            } else {
+                showMessage('Failed to update story summary', 'error');
+            }
+        }
+        
+    } catch (error) {
+        console.error('Failed to edit story summary:', error);
+        showMessage('Failed to edit story summary: ' + (error as Error).message, 'error');
+    }
+}
+
+/**
+ * Edit story steps
+ */
+async function editStorySteps(sessionId: string): Promise<void> {
+    try {
+        // Load current story steps
+        const { loadStorySteps } = await import('./database.js');
+        const storySteps = await loadStorySteps(sessionId);
+        
+        if (storySteps.length === 0) {
+            showMessage('No story steps found for this session', 'error');
+            return;
+        }
+        
+        // Create a simple step editor (for now, just show the first step)
+        // In the future, this could be expanded to edit multiple steps
+        const firstStep = storySteps[0];
+        const newStoryText = prompt('Edit story text for step 1:', firstStep.story_text);
+        
+        if (newStoryText !== null && newStoryText !== firstStep.story_text) {
+            // Update the step in the database
+            const { updateStoryStep } = await import('./database.js');
+            const success = await updateStoryStep(firstStep.id!, { story_text: newStoryText });
+            
+            if (success) {
+                showMessage('Story step updated successfully!', 'success');
+                // Refresh the display
+                await loadSessionData(sessionId);
+            } else {
+                showMessage('Failed to update story step', 'error');
+            }
+        }
+        
+    } catch (error) {
+        console.error('Failed to edit story steps:', error);
+        showMessage('Failed to edit story steps: ' + (error as Error).message, 'error');
+    }
+}
+
+/**
+ * Setup event listeners for delete memory buttons
+ */
+function setupDeleteMemoryEventListeners(): void {
+    const deleteButtons = document.querySelectorAll('.delete-memory-btn');
+    deleteButtons.forEach(button => {
+        button.addEventListener('click', async (e) => {
+            const target = e.target as HTMLElement;
+            const index = parseInt(target.dataset.index || '0');
+            
+            if (confirm(`Are you sure you want to delete memory ${index + 1}?`)) {
+                try {
+                    // Check if we're viewing a session or have a loaded game
+                    const sessionSelector = document.getElementById('story-session-selector') as HTMLSelectElement;
+                    const gameState = getGameState();
+                    
+                    if (sessionSelector && sessionSelector.value && gameState.currentState === 'MENU') {
+                        // We're viewing a session in Story Management - delete from database
+                        await deleteMemoryFromSession(sessionSelector.value, index);
+                    } else if (gameState.currentState === 'PLAYING' && gameState.sessionId) {
+                        // We have a loaded game - delete from current game state and database
+                        await deleteMemoryFromCurrentGame(index);
+                    } else {
+                        showMessage('Cannot delete memory: No active game or session', 'error');
+                        return;
+                    }
+                    
+                    // Wait a moment for database update to complete, then refresh
+                    await new Promise(resolve => setTimeout(resolve, 100));
+                    await loadCurrentMemories();
+                    
+                } catch (error) {
+                    console.error('Failed to delete memory:', error);
+                    showMessage('Failed to delete memory', 'error');
+                }
+            }
+        });
+    });
+}
+
+/**
+ * Delete memory from a session in the database
+ */
+async function deleteMemoryFromSession(sessionId: string, memoryIndex: number): Promise<void> {
+    try {
+        console.log(`🗑️ Deleting memory ${memoryIndex + 1} from session ${sessionId}`);
+        
+        // Load story steps from the database
+        const { loadStorySteps } = await import('./database.js');
+        const storySteps = await loadStorySteps(sessionId);
+        
+        // Collect all memories to find the one to delete
+        const allMemories: string[] = [];
+        const memoryToStepMap: { [key: number]: { stepIndex: number, stepNumber: number } } = {};
+        
+        storySteps.forEach((step, stepIndex) => {
+            if (step.new_memories && step.new_memories.length > 0) {
+                step.new_memories.forEach((memory, memoryIndexInStep) => {
+                    const globalMemoryIndex = allMemories.length;
+                    allMemories.push(memory);
+                    memoryToStepMap[globalMemoryIndex] = { stepIndex, stepNumber: step.step_number };
+                });
+            }
+        });
+        
+        if (memoryIndex >= 0 && memoryIndex < allMemories.length) {
+            const memoryToDelete = allMemories[memoryIndex];
+            const stepInfo = memoryToStepMap[memoryIndex];
+            
+            console.log(`🗑️ Memory to delete: "${memoryToDelete}" from step ${stepInfo.stepNumber}`);
+            
+            // Remove the memory from the step's new_memories array
+            const step = storySteps[stepInfo.stepIndex];
+            const memoryIndexInStep = step.new_memories.indexOf(memoryToDelete);
+            
+            if (memoryIndexInStep !== -1) {
+                step.new_memories.splice(memoryIndexInStep, 1);
+                
+                // Update the step in the database by finding and updating the existing record
+                const { loadStorySteps } = await import('./database.js');
+                console.log(`💾 Updating step ${step.step_number} with new_memories:`, step.new_memories);
+                
+                // First, find the existing step by step_number and session_id
+                const existingSteps = await loadStorySteps(sessionId);
+                const existingStep = existingSteps.find(s => s.step_number === step.step_number);
+                
+                if (existingStep && existingStep.id) {
+                    console.log(`🔍 Found existing step with ID: ${existingStep.id}`);
+                    
+                    // Update the existing step's new_memories field
+                    const { updateStoryStep } = await import('./database.js');
+                    await updateStoryStep(existingStep.id, { new_memories: step.new_memories });
+                    
+                    console.log(`✅ Step ${step.step_number} updated in database successfully`);
+                } else {
+                    console.error(`❌ Could not find existing step ${step.step_number} to update or step has no ID`);
+                }
+                
+                // Verify the update by reloading the step
+                const updatedSteps = await loadStorySteps(sessionId);
+                const updatedStep = updatedSteps.find(s => s.step_number === step.step_number);
+                console.log(`🔍 Verification - Step ${step.step_number} new_memories after update:`, updatedStep?.new_memories);
+                
+                showMessage(`Memory "${memoryToDelete}" deleted successfully from session`, 'success');
+            } else {
+                showMessage('Memory not found in step', 'error');
+            }
+        } else {
+            showMessage('Invalid memory index', 'error');
+        }
+        
+    } catch (error) {
+        console.error('Failed to delete memory from session:', error);
+        throw error;
+    }
+}
+
+/**
+ * Delete memory from current loaded game
+ */
+async function deleteMemoryFromCurrentGame(memoryIndex: number): Promise<void> {
+    try {
+        const gameState = getGameState();
+        const memories = gameState.memories || [];
+        
+        if (memoryIndex >= 0 && memoryIndex < memories.length) {
+            const memoryToDelete = memories[memoryIndex];
+            
+            // Remove the memory from current game state
+            memories.splice(memoryIndex, 1);
+            updateGameState({ memories });
+            
+            // Also remove from database if we have a session
+            if (gameState.sessionId) {
+                // Find which step contains this memory and update it
+                // This is more complex and would require tracking memory sources
+                // For now, just update the game state
+                console.log(`🗑️ Memory "${memoryToDelete}" deleted from current game state`);
+            }
+            
+            showMessage(`Memory "${memoryToDelete}" deleted successfully`, 'success');
+        } else {
+            showMessage('Invalid memory index', 'error');
+        }
+        
+    } catch (error) {
+        console.error('Failed to delete memory from current game:', error);
+        throw error;
     }
 }
