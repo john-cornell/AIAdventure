@@ -155,6 +155,71 @@ class Logger {
             byLevel
         };
     }
+
+    /**
+     * Export all logs to a formatted text file
+     * @param includeDebug - Whether to include debug level logs
+     * @returns Formatted text string with all logs
+     */
+    exportToText(includeDebug: boolean = false): string {
+        const filteredEntries = includeDebug 
+            ? this.entries 
+            : this.entries.filter(entry => entry.level !== 'debug');
+        
+        const lines: string[] = [];
+        lines.push('='.repeat(80));
+        lines.push('AI ADVENTURE GAME - LOG EXPORT');
+        lines.push('='.repeat(80));
+        lines.push(`Export Date: ${new Date().toISOString()}`);
+        lines.push(`Total Log Entries: ${this.entries.length}`);
+        lines.push(`Filtered Entries: ${filteredEntries.length}`);
+        lines.push('');
+        
+        const stats = this.getStats();
+        lines.push('LOG STATISTICS:');
+        lines.push(`- Errors: ${stats.byLevel.error}`);
+        lines.push(`- Warnings: ${stats.byLevel.warn}`);
+        lines.push(`- Info: ${stats.byLevel.info}`);
+        lines.push(`- Debug: ${stats.byLevel.debug}`);
+        lines.push('');
+        lines.push('='.repeat(80));
+        lines.push('DETAILED LOG ENTRIES:');
+        lines.push('='.repeat(80));
+        lines.push('');
+        
+        filteredEntries.forEach((entry, index) => {
+            const timestamp = entry.timestamp.toISOString();
+            const level = entry.level.toUpperCase().padEnd(5);
+            const component = entry.component.padEnd(15);
+            const dataStr = entry.data ? `\n    Data: ${JSON.stringify(entry.data, null, 2)}` : '';
+            
+            lines.push(`[${index + 1}] ${timestamp} [${level}] [${component}] ${entry.message}${dataStr}`);
+            lines.push('');
+        });
+        
+        return lines.join('\n');
+    }
+
+    /**
+     * Download logs as a text file
+     * @param includeDebug - Whether to include debug level logs
+     */
+    downloadLogs(includeDebug: boolean = false): void {
+        const logText = this.exportToText(includeDebug);
+        const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+        const filename = `ai-adventure-logs-${timestamp}.txt`;
+        
+        const blob = new Blob([logText], { type: 'text/plain' });
+        const url = URL.createObjectURL(blob);
+        
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = filename;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+    }
 }
 
 // Create a singleton instance
@@ -165,3 +230,39 @@ export const logError = (component: string, message: string, data?: any) => logg
 export const logWarn = (component: string, message: string, data?: any) => logger.warn(component, message, data);
 export const logInfo = (component: string, message: string, data?: any) => logger.info(component, message, data);
 export const logDebug = (component: string, message: string, data?: any) => logger.debug(component, message, data);
+
+// Export logger instance and utility functions
+export const exportLogsToText = (includeDebug: boolean = false) => logger.exportToText(includeDebug);
+export const downloadLogs = (includeDebug: boolean = false) => logger.downloadLogs(includeDebug);
+
+// Expose to window for UI access
+if (typeof window !== 'undefined') {
+    (window as any).downloadLogs = downloadLogs;
+    (window as any).exportLogsToText = exportLogsToText;
+    
+    // Add text log download function
+    (window as any).downloadTextLogs = async (sessionId: string) => {
+        try {
+            const { exportTextLogsAsText } = await import('./database.js');
+            const logText = await exportTextLogsAsText(sessionId);
+            const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+            const filename = `ai-adventure-text-logs-${sessionId}-${timestamp}.txt`;
+            
+            const blob = new Blob([logText], { type: 'text/plain' });
+            const url = URL.createObjectURL(blob);
+            
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = filename;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+            
+            return true;
+        } catch (error) {
+            console.error('Failed to download text logs:', error);
+            return false;
+        }
+    };
+}

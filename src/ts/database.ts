@@ -38,11 +38,22 @@ interface StoryStepRecord {
     image_data?: string;
 }
 
+interface TextLogRecord {
+    id?: number;
+    session_id: string;
+    log_type: 'original_prompt' | 'llm_call' | 'llm_response' | 'image_prompt' | 'story_summary';
+    step_number?: number;
+    content: string;
+    metadata?: string; // JSON string for additional data
+    timestamp: number;
+}
+
 // Extend Dexie to add our tables
 class GameDatabase extends Dexie {
     configs!: Table<ConfigRecord>;
     storySummaries!: Table<StorySummaryRecord>;
     storySteps!: Table<StoryStepRecord>;
+    textLogs!: Table<TextLogRecord>;
 
     constructor(dbName: string = 'AIAdventureDB') {
         super(dbName);
@@ -61,6 +72,13 @@ class GameDatabase extends Dexie {
             storySummaries: '++id, session_id, step_count, created_at, updated_at',
             storySteps: '++id, session_id, step_number, story_entry_id, timestamp'
         });
+        
+        this.version(4).stores({
+            configs: '++id, label, created_at, updated_at',
+            storySummaries: '++id, session_id, step_count, created_at, updated_at',
+            storySteps: '++id, session_id, step_number, story_entry_id, timestamp',
+            textLogs: '++id, session_id, log_type, step_number, timestamp'
+        });
     }
 }
 
@@ -76,10 +94,10 @@ export async function initializeDatabase(): Promise<void> {
         const dbName = 'AIAdventureDB';
         db = new GameDatabase(dbName);
         
-        logInfo('Database', `Database '${dbName}' initialized successfully (version 3)`);
+        logInfo('Database', `Database '${dbName}' initialized successfully (version 4)`);
         logDebug('Database', 'Database configuration:', {
             name: dbName,
-            version: 3,
+            version: 4,
             maxEntries: 10000,
             autoBackup: true,
             backupInterval: 60
@@ -147,7 +165,6 @@ export async function loadConfig(label: string): Promise<GameConfig | null> {
         
         if (record) {
             const config = JSON.parse(record.config_json) as GameConfig;
-            logInfo('Database', `Config '${label}' loaded from database`);
             return config;
         } else {
             logInfo('Database', `Config '${label}' not found in database`);
@@ -399,8 +416,6 @@ export async function getGameSessionData(sessionId: string): Promise<{
         // Get story summaries for this session
         const storySummaries = await database.storySummaries.where('session_id').equals(sessionId).toArray();
         
-        logInfo('Database', `Retrieved data for session ${sessionId}: ${configs.length} configs, ${storySummaries.length} story summaries`);
-        
         return {
             configs,
             storySummaries
@@ -424,8 +439,6 @@ export async function getAllDatabaseData(): Promise<{
         const configs = await database.configs.toArray();
         const storySummaries = await database.storySummaries.toArray();
         const storySteps = await database.storySteps.toArray();
-        
-        logInfo('Database', `Retrieved all database data: ${configs.length} configs, ${storySummaries.length} story summaries, ${storySteps.length} story steps`);
         
         return {
             configs,
@@ -528,7 +541,6 @@ export async function loadStorySteps(sessionId: string): Promise<StoryStepRecord
         // Sort by step number
         steps.sort((a, b) => a.step_number - b.step_number);
         
-        logInfo('Database', `Loaded ${steps.length} story steps for session ${sessionId}`);
         return steps;
         
     } catch (error) {
@@ -653,5 +665,189 @@ export function closeDatabase(): void {
     if (db) {
         db.close();
         logInfo('Database', 'Database connection closed');
+    }
+}
+
+// ============================================================================
+// TEXT LOGS FUNCTIONS
+// ============================================================================
+
+/**
+ * Save a text log entry to the database
+ */
+export async function saveTextLog(
+    sessionId: string,
+    logType: 'original_prompt' | 'llm_call' | 'llm_response' | 'image_prompt' | 'story_summary',
+    content: string,
+    stepNumber?: number,
+    metadata?: any
+): Promise<number> {
+    try {
+        const database = getDatabase();
+        const logRecord: TextLogRecord = {
+            session_id: sessionId,
+            log_type: logType,
+            step_number: stepNumber,
+            content,
+            metadata: metadata ? JSON.stringify(metadata) : undefined,
+            timestamp: Date.now()
+        };
+
+        const id = await database.textLogs.add(logRecord);
+        return id as number;
+        
+    } catch (error) {
+        logError('Database', `Failed to save text log for session ${sessionId}`, error);
+        throw error;
+    }
+}
+
+/**
+ * Get all text logs for a session
+ */
+export async function getTextLogs(sessionId: string): Promise<TextLogRecord[]> {
+    try {
+        const database = getDatabase();
+        const logs = await database.textLogs
+            .where('session_id')
+            .equals(sessionId)
+            .toArray();
+        
+        // Sort by timestamp
+        logs.sort((a, b) => a.timestamp - b.timestamp);
+        return logs;
+        
+    } catch (error) {
+        logError('Database', `Failed to get text logs for session ${sessionId}`, error);
+        return [];
+    }
+}
+
+/**
+ * Get text logs for a session by type
+ */
+export async function getTextLogsByType(
+    sessionId: string, 
+    logType: 'original_prompt' | 'llm_call' | 'llm_response' | 'image_prompt' | 'story_summary'
+): Promise<TextLogRecord[]> {
+    try {
+        const database = getDatabase();
+        const logs = await database.textLogs
+            .where('session_id')
+            .equals(sessionId)
+            .and(log => log.log_type === logType)
+            .toArray();
+        
+        // Sort by timestamp
+        logs.sort((a, b) => a.timestamp - b.timestamp);
+        return logs;
+        
+    } catch (error) {
+        logError('Database', `Failed to get text logs for session ${sessionId} and type ${logType}`, error);
+        return [];
+    }
+}
+
+/**
+ * Export all text logs for a session as formatted text
+ */
+export async function exportTextLogsAsText(sessionId: string): Promise<string> {
+    try {
+        const logs = await getTextLogs(sessionId);
+        
+        if (logs.length === 0) {
+            return 'No text logs found for this session.';
+        }
+        
+        let output = `=== TEXT LOGS FOR SESSION: ${sessionId} ===\n`;
+        output += `Generated: ${new Date().toISOString()}\n`;
+        output += `Total Log Entries: ${logs.length}\n\n`;
+        
+        // Group logs by type for better organization
+        const logsByType = {
+            original_prompt: logs.filter(log => log.log_type === 'original_prompt'),
+            llm_call: logs.filter(log => log.log_type === 'llm_call'),
+            llm_response: logs.filter(log => log.log_type === 'llm_response'),
+            image_prompt: logs.filter(log => log.log_type === 'image_prompt'),
+            story_summary: logs.filter(log => log.log_type === 'story_summary')
+        };
+        
+        // Original Prompt
+        if (logsByType.original_prompt.length > 0) {
+            output += `\n=== ORIGINAL PROMPT ===\n`;
+            logsByType.original_prompt.forEach((log, index) => {
+                output += `[${new Date(log.timestamp).toISOString()}] Original Prompt ${index + 1}:\n`;
+                output += `${log.content}\n\n`;
+            });
+        }
+        
+        // LLM Calls
+        if (logsByType.llm_call.length > 0) {
+            output += `\n=== LLM CALLS ===\n`;
+            logsByType.llm_call.forEach((log, index) => {
+                output += `[${new Date(log.timestamp).toISOString()}] LLM Call ${index + 1}`;
+                if (log.step_number) output += ` (Step ${log.step_number})`;
+                output += `:\n`;
+                output += `${log.content}\n\n`;
+            });
+        }
+        
+        // LLM Responses
+        if (logsByType.llm_response.length > 0) {
+            output += `\n=== LLM RESPONSES ===\n`;
+            logsByType.llm_response.forEach((log, index) => {
+                output += `[${new Date(log.timestamp).toISOString()}] LLM Response ${index + 1}`;
+                if (log.step_number) output += ` (Step ${log.step_number})`;
+                output += `:\n`;
+                output += `${log.content}\n\n`;
+            });
+        }
+        
+        // Image Prompts
+        if (logsByType.image_prompt.length > 0) {
+            output += `\n=== IMAGE PROMPTS ===\n`;
+            logsByType.image_prompt.forEach((log, index) => {
+                output += `[${new Date(log.timestamp).toISOString()}] Image Prompt ${index + 1}`;
+                if (log.step_number) output += ` (Step ${log.step_number})`;
+                output += `:\n`;
+                output += `${log.content}\n\n`;
+            });
+        }
+        
+        // Story Summaries
+        if (logsByType.story_summary.length > 0) {
+            output += `\n=== STORY SUMMARIES ===\n`;
+            logsByType.story_summary.forEach((log, index) => {
+                output += `[${new Date(log.timestamp).toISOString()}] Story Summary ${index + 1}`;
+                if (log.step_number) output += ` (Step ${log.step_number})`;
+                output += `:\n`;
+                output += `${log.content}\n\n`;
+            });
+        }
+        
+        return output;
+        
+    } catch (error) {
+        logError('Database', `Failed to export text logs for session ${sessionId}`, error);
+        return `Error exporting text logs: ${error instanceof Error ? error.message : 'Unknown error'}`;
+    }
+}
+
+/**
+ * Delete all text logs for a session
+ */
+export async function deleteTextLogs(sessionId: string): Promise<boolean> {
+    try {
+        const database = getDatabase();
+        const deletedCount = await database.textLogs
+            .where('session_id')
+            .equals(sessionId)
+            .delete();
+        
+        return deletedCount > 0;
+        
+    } catch (error) {
+        logError('Database', `Failed to delete text logs for session ${sessionId}`, error);
+        return false;
     }
 }

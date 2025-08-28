@@ -12,7 +12,7 @@ import { generateLocalImageWithRetry, generateLocalImageWithFaceRestoration, isF
 import { loadConfig, saveConfig } from './config.js';
 import { logInfo, logWarn, logError, logDebug } from './logger.js';
 import { generateUUID, generateTitleFromPrompt } from './uuid.js';
-import { saveStorySummary, loadStorySummary, saveStoryStep } from './database.js';
+import { saveStorySummary, loadStorySummary, saveStoryStep, saveTextLog } from './database.js';
 
 /**
  * Get package version from package.json
@@ -422,19 +422,22 @@ async function createStorySummary(previousSummary?: string): Promise<string> {
     });
     
     // Build the prompt with previous summary context
-    let summaryPrompt = `Create a comprehensive summary of this adventure story, focusing on the MOST IMPORTANT details:
+    let summaryPrompt = `Create a factual summary of what has happened in this adventure story so far:
 
-CRITICAL ELEMENTS TO INCLUDE:
-- Character names, roles, and key traits
-- Major plot developments and turning points
-- Important locations and their significance
-- Key decisions made by the player and their consequences
-- Mysteries, secrets, or unresolved plot threads
-- Character relationships and dynamics
-- Items, abilities, or resources acquired
-- Current situation and immediate context
+CRITICAL RULES:
+- ONLY summarize what has actually happened in the story steps
+- DO NOT invent character names, backstories, or details that weren't mentioned
+- DO NOT add locations, items, or relationships that weren't established
+- Focus on the sequence of events and player choices
+- Keep it concise and factual
+- If no specific character name was given, refer to them as "you" or "the protagonist"
 
-IMPORTANT: Create a CONCISE but COMPREHENSIVE summary. Do NOT just list the steps. Synthesize the information into a coherent narrative summary.`;
+IMPORTANT: This is a factual summary of events, not creative writing. Only include details that were explicitly mentioned in the story.`;
+
+    // Include initial prompt context if available
+    if (currentSession?.initialPrompt) {
+        summaryPrompt += `\n\nORIGINAL STORY PREMISE: ${currentSession.initialPrompt}\n\nPlease ensure the summary reflects how the story has evolved from this original premise.`;
+    }
 
     // Add previous summary context if available
     if (previousSummary) {
@@ -449,7 +452,7 @@ ${gameState.storyLog.map((entry, index) =>
     `STEP ${index + 1}: ${entry.story}`
 ).join('\n\n')}
 
-Create a detailed summary that captures all essential narrative elements, character development, and plot progression. Focus on what matters most for continuing the story coherently.
+Create a factual summary of the events that have occurred. Focus on what actually happened and the choices that were made.
 
 RESPONSE FORMAT: Return ONLY a JSON object with a "story" field containing the summary text. Example:
 {
@@ -460,7 +463,7 @@ RESPONSE FORMAT: Return ONLY a JSON object with a "story" field containing the s
         logDebug('Game', 'Calling LLM for story summary with prompt length:', summaryPrompt.length);
         
         const response = await callLocalLLMWithRetry(
-            'You are an expert story analyst. Create detailed summaries focusing on narrative elements, character development, and plot progression. Return ONLY a JSON object with a "story" field containing the summary.',
+            'You are a factual story summarizer. Create concise summaries of what has actually happened in the story, without inventing new details. Return ONLY a JSON object with a "story" field containing the summary.',
             [{ role: 'user', content: summaryPrompt }],
             [{ name: 'story', type: 'string' }],
             2 // Increased retries for summary
@@ -486,6 +489,20 @@ RESPONSE FORMAT: Return ONLY a JSON object with a "story" field containing the s
             summary: summary.substring(0, 200) + (summary.length > 200 ? '...' : ''),
             hadPreviousSummary: !!previousSummary 
         });
+        
+        // Save story summary to text logs
+        if (gameState.sessionId) {
+            try {
+                const currentStepNumber = gameState.storyLog.length;
+                const summaryContent = `Summary Prompt:\n${summaryPrompt}\n\nGenerated Summary:\n${summary}`;
+                await saveTextLog(gameState.sessionId, 'story_summary', summaryContent, currentStepNumber);
+                logDebug('Game', `Story summary saved to text logs for step ${currentStepNumber}`);
+            } catch (error) {
+                logError('Game', 'Failed to save story summary to text logs', error);
+                // Don't fail the summary for text log save errors
+            }
+        }
+        
         return summary;
         
     } catch (error) {
@@ -653,6 +670,15 @@ export async function startGame(initialPrompt: string): Promise<void> {
 
     logInfo('Game', `Started new game session: ${sessionTitle} (${sessionId})`);
 
+    // Save original prompt to text logs
+    try {
+        await saveTextLog(sessionId, 'original_prompt', initialPrompt);
+        logDebug('Game', `Original prompt saved to text logs for session ${sessionId}`);
+    } catch (error) {
+        logError('Game', 'Failed to save original prompt to text logs', error);
+        // Don't fail the game for text log save errors
+    }
+
     // Add initial prompt to message history
     if (initialPrompt.trim()) {
         gameState.messageHistory.push({
@@ -669,7 +695,6 @@ export async function startGame(initialPrompt: string): Promise<void> {
         logDebug('Game', `Creating initial story summary for session ${sessionId}`);
         const initialSummary = `New adventure started with prompt: "${initialPrompt}". The story begins here...`;
         await saveStorySummary(sessionId, initialSummary, 0, 'initial');
-        logInfo('Game', `Initial story summary saved to database for session ${sessionId}`);
     } catch (error) {
         logError('Game', 'Failed to save initial story summary to database', error);
         // Don't fail the game for summary save errors
@@ -683,7 +708,6 @@ export async function startGame(initialPrompt: string): Promise<void> {
  * Execute LLM call to generate next story segment
  */
 export async function executeLLMCall(retries: number = 3): Promise<void> {
-    logInfo('Game', 'Starting LLM call...');
     gameState.currentState = 'LOADING';
     
     // Notify UI of state change
@@ -701,7 +725,6 @@ export async function executeLLMCall(retries: number = 3): Promise<void> {
     }
 
     try {
-        logDebug('Game', 'Calling callLocalLLMWithRetry...');
         
         // Check for repetition and get appropriate system prompt
         const repetitionDetected = shouldSummarizeDueToRepetition();
@@ -713,6 +736,26 @@ export async function executeLLMCall(retries: number = 3): Promise<void> {
         
         let response = await callLocalLLMWithRetry(currentSystemPrompt, gameState.messageHistory, jsonFields, retries);
         logInfo('Game', 'Received LLM response', response);
+        
+        // Save LLM call and response to text logs
+        if (gameState.sessionId) {
+            try {
+                const currentStepNumber = gameState.storyLog.length + 1;
+                
+                // Save LLM call (system prompt + message history)
+                const llmCallContent = `System Prompt:\n${currentSystemPrompt}\n\nMessage History:\n${JSON.stringify(gameState.messageHistory, null, 2)}`;
+                await saveTextLog(gameState.sessionId, 'llm_call', llmCallContent, currentStepNumber);
+                
+                // Save LLM response
+                const llmResponseContent = JSON.stringify(response, null, 2);
+                await saveTextLog(gameState.sessionId, 'llm_response', llmResponseContent, currentStepNumber);
+                
+                logDebug('Game', `LLM call and response saved to text logs for step ${currentStepNumber}`);
+            } catch (error) {
+                logError('Game', 'Failed to save LLM call/response to text logs', error);
+                // Don't fail the game for text log save errors
+            }
+        }
         
         // Debug choices structure
         if (response && response.choices) {
@@ -803,6 +846,12 @@ export async function executeLLMCall(retries: number = 3): Promise<void> {
             logInfo('Game', `Created story entry: ${storyEntry.id}`);
 
             gameState.storyLog.push(storyEntry);
+
+            // Check if we need to perform rolling summarization (every 5th step after step 10)
+            const currentStepNumber = gameState.storyLog.length;
+            if (currentStepNumber >= 10 && currentStepNumber % 5 === 0) {
+                await performRollingSummarization();
+            }
 
             // Add new salient story points (initialize as empty array if missing)
             const newMemories = response.new_memories || [];
@@ -1176,8 +1225,8 @@ export async function updateGame(choice: string): Promise<void> {
     // Build enhanced choice with context in priority order
     let enhancedChoice = '';
     
-    // 0. INITIAL PROMPT CONTEXT (only for first call when starting new game)
-    if (gameState.storyLog.length === 0 && currentSession?.initialPrompt) {
+    // 0. INITIAL PROMPT CONTEXT (always include for story continuity)
+    if (currentSession?.initialPrompt) {
         enhancedChoice = `INITIAL STORY PROMPT: ${currentSession.initialPrompt}\n\n`;
         logInfo('Game', `Added initial prompt context: ${currentSession.initialPrompt}`);
     }
@@ -1239,6 +1288,18 @@ export async function generateImageAsync(imagePrompt: string, storyEntry: StoryE
         const config = await loadConfig();
         if (config.stableDiffusion.url) {
             logInfo('Game', 'Generating image asynchronously...');
+            
+            // Save image prompt to text logs
+            if (gameState.sessionId) {
+                try {
+                    const currentStepNumber = gameState.storyLog.length;
+                    await saveTextLog(gameState.sessionId, 'image_prompt', imagePrompt, currentStepNumber);
+                    logDebug('Game', `Image prompt saved to text logs for step ${currentStepNumber}`);
+                } catch (error) {
+                    logError('Game', 'Failed to save image prompt to text logs', error);
+                    // Don't fail image generation for text log save errors
+                }
+            }
             
             // Check face restoration setting and availability
             const faceRestorationSetting = config.stableDiffusion.faceRestoration;
@@ -1676,7 +1737,7 @@ export async function autoSummarizeSteps(): Promise<{ success: boolean; error?: 
         // Create a new story entry with the summary as "STEP 1: Summary"
         const summaryEntry: StoryEntry = {
             id: generateUUID(),
-            story: `STEP 1: Summary\n\n${summary}\n\nThe adventure continues from this summarized state.`,
+            story: `📋 COMPLETE STORY SUMMARY:\n\n${summary}\n\nThe adventure continues from this summarized state.`,
             image_prompt: 'A mystical scene representing the summarized journey so far, with elements from the story visible in the background',
             choices: [
                 "Continue the adventure",
@@ -1734,6 +1795,108 @@ export async function autoSummarizeSteps(): Promise<{ success: boolean; error?: 
             success: false, 
             error: `Auto-summarize failed: ${error instanceof Error ? error.message : 'Unknown error'}` 
         };
+    }
+}
+
+/**
+ * Perform rolling summarization every 5th step after step 10
+ * Summarizes the previous 5 steps and replaces them with a summary
+ */
+async function performRollingSummarization(): Promise<void> {
+    try {
+        const currentStepNumber = gameState.storyLog.length;
+        logInfo('Game', `Performing rolling summarization at step ${currentStepNumber}`);
+        
+        // Calculate which steps to summarize (previous 5 steps)
+        const startIndex = currentStepNumber - 5;
+        const endIndex = currentStepNumber - 1;
+        
+        if (startIndex < 0 || endIndex < 0) {
+            logWarn('Game', 'Cannot perform rolling summarization - not enough steps');
+            return;
+        }
+        
+        // Extract the 5 steps to summarize
+        const stepsToSummarize = gameState.storyLog.slice(startIndex, endIndex + 1);
+        logInfo('Game', `Summarizing steps ${startIndex + 1} to ${endIndex + 1} (${stepsToSummarize.length} steps)`);
+        
+        // Create a summary prompt for these specific steps
+        let summaryPrompt = `Create a concise summary of these 5 story steps, focusing on the most important narrative developments:
+
+${stepsToSummarize.map((step, index) => 
+    `Step ${startIndex + index + 1}: ${step.story}`
+).join('\n\n')}
+
+Create a brief but comprehensive summary that captures the key events, character developments, and plot progression from these steps. Focus on what's important for continuing the story.`;
+
+        // Include initial prompt context if available
+        if (currentSession?.initialPrompt) {
+            summaryPrompt += `\n\nORIGINAL STORY PREMISE: ${currentSession.initialPrompt}\n\nPlease ensure the summary reflects how these steps relate to the original story premise.`;
+        }
+
+        summaryPrompt += `\n\nRESPONSE FORMAT: Return ONLY a JSON object with a "story" field containing the summary text. Example:
+{
+  "story": "Your summary here..."
+}`;
+
+        // Call LLM to create the summary
+        const response = await callLocalLLMWithRetry(
+            'You are an expert story analyst. Create concise summaries focusing on narrative elements and plot progression. Return ONLY a JSON object with a "story" field containing the summary.',
+            [{ role: 'user', content: summaryPrompt }],
+            [{ name: 'story', type: 'string' }],
+            2
+        );
+        
+        if (!response || !response.story) {
+            throw new Error('LLM returned empty or invalid response for rolling summary');
+        }
+        
+        const summary = response.story.trim();
+        if (summary.length < 50) {
+            throw new Error(`LLM returned summary too short (${summary.length} chars): "${summary}"`);
+        }
+        
+        logInfo('Game', `Rolling summary created successfully (${summary.length} chars)`);
+        
+        // Store the summary internally for backend processing only
+        // DO NOT add it to the story log that the user sees
+        const internalSummary = summary;
+        
+        // Keep only the current step and any beyond (remove the 5 summarized steps)
+        const stepsToKeep = gameState.storyLog.slice(endIndex + 1); // Keep current step and any beyond
+        gameState.storyLog = stepsToKeep;
+        
+        // Update the step numbers for remaining entries to maintain continuity
+        gameState.storyLog.forEach((entry, index) => {
+            // The entry keeps its original timestamp and ID, just renumbering for display
+            // This ensures the user doesn't see any gaps in the story
+        });
+        
+        logInfo('Game', `Rolling summarization completed. Story log now has ${gameState.storyLog.length} entries`);
+        logDebug('Game', 'Rolling summary content:', { 
+            summary: summary.substring(0, 200) + (summary.length > 200 ? '...' : '')
+        });
+        
+        // Update message history to reflect the summarization
+        // Remove the old steps from message history and add the summary for internal context only
+        const oldMessageCount = stepsToSummarize.length * 2; // Each step has user + assistant messages
+        if (gameState.messageHistory.length >= oldMessageCount) {
+            gameState.messageHistory = gameState.messageHistory.slice(oldMessageCount);
+        }
+        
+        // Add the summary to message history for internal context only
+        // This is NOT displayed to the user, only used for backend processing
+        gameState.messageHistory.unshift({
+            role: 'system',
+            content: `Internal Summary (Steps ${startIndex + 1}-${endIndex + 1}): ${internalSummary}`
+        });
+        
+        logInfo('Game', 'Message history updated with internal rolling summary (not displayed to user)');
+        
+    } catch (error) {
+        logError('Game', 'Rolling summarization failed', error);
+        // Don't fail the game for summarization errors, just log them
+        console.warn('⚠️ Rolling summarization failed, continuing with normal story progression');
     }
 }
 

@@ -70,6 +70,25 @@
                                     <i class="fas fa-spinner fa-spin text-5xl text-indigo-400"></i>
                                     <p class="mt-4 text-lg text-gray-300">The world is materializing...</p>
                                 </div>
+                                
+                                <!-- Game Controls -->
+                                <div id="game-controls" class="absolute top-4 right-4 flex items-center gap-3 text-gray-400 hidden">
+                                    <button id="export-button" title="Export Story" class="w-10 h-10 bg-gray-800/50 rounded-full hover:bg-gray-700/70 transition-colors flex items-center justify-center">
+                                        <i class="fas fa-download"></i>
+                                    </button>
+                                    <button id="download-logs-button" title="Download LLM Logs" class="w-10 h-10 bg-gray-800/50 rounded-full hover:bg-gray-700/70 transition-colors flex items-center justify-center">
+                                        <i class="fas fa-file-alt"></i>
+                                    </button>
+                                                                    <button id="memories-button" title="View/Edit Memories" class="w-10 h-10 bg-gray-800/50 rounded-full hover:bg-gray-700/70 transition-colors flex items-center justify-center">
+                                    <i class="fas fa-brain"></i>
+                                </button>
+                                <button id="story-management-button" title="Story Management" class="w-10 h-10 bg-gray-800/50 rounded-full hover:bg-gray-700/70 transition-colors flex items-center justify-center">
+                                    <i class="fas fa-book"></i>
+                                </button>
+                                    <button id="music-toggle" title="Toggle Music" class="w-10 h-10 bg-gray-800/50 rounded-full hover:bg-gray-700/70 transition-colors flex items-center justify-center">
+                                        <i id="music-icon" class="fas fa-volume-up"></i>
+                                    </button>
+                                </div>
                             </div>
                             <div class="p-6 sm:p-8">
                                 <!-- TABS -->
@@ -96,25 +115,14 @@
                                 </div>
                             </div>
         
-                            <div id="game-controls" class="absolute top-4 right-4 flex items-center gap-3 text-gray-400 hidden">
-                                <button id="export-button" title="Export Story" class="w-10 h-10 bg-gray-800/50 rounded-full hover:bg-gray-700/70 transition-colors flex items-center justify-center">
-                                    <i class="fas fa-download"></i>
-                                </button>
-                                <button id="memories-button" title="View/Edit Memories" class="w-10 h-10 bg-gray-800/50 rounded-full hover:bg-gray-700/70 transition-colors flex items-center justify-center">
-                                    <i class="fas fa-brain"></i>
-                                </button>
-                                <button id="music-toggle" title="Toggle Music" class="w-10 h-10 bg-gray-800/50 rounded-full hover:bg-gray-700/70 transition-colors flex items-center justify-center">
-                                    <i id="music-icon" class="fas fa-volume-up"></i>
-                                </button>
-                            </div>
+
                         </div>
                     </div>
 
+                    <audio id="click-sound" src="https://cdn.simulationtheory.ai/gasset/?asset=sound&prompt=soft_button_click_UI" preload="auto"></audio>
+                    <audio id="bg-music" loop src="" preload="auto"></audio>
 
-                        <audio id="click-sound" src="https://cdn.simulationtheory.ai/gasset/?asset=sound&prompt=soft_button_click_UI" preload="auto"></audio>
-                        <audio id="bg-music" loop src="" preload="auto"></audio>
-
-                        <div id="custom-modal" class="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center hidden z-50 p-4 animate__animated animate__fadeIn">
+                    <div id="custom-modal" class="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center hidden z-50 p-4 animate__animated animate__fadeIn">
                             <div id="modal-content" class="bg-gray-800 border border-gray-700 rounded-2xl shadow-2xl shadow-indigo-500/20 p-8 w-full max-w-md text-center transform transition-all animate__animated">
                                 <h3 id="modal-title" class="text-2xl font-bold text-white mb-4"></h3>
                                 <p id="modal-message" class="text-gray-300 mb-8"></p>
@@ -151,7 +159,9 @@
                         const importButton = document.getElementById('import-button');
                         const importFileInput = document.getElementById('import-file-input');
                         const exportButton = document.getElementById('export-button');
+                        const downloadLogsButton = document.getElementById('download-logs-button');
                         const memoriesButton = document.getElementById('memories-button'); // New element reference
+                        const storyManagementButton = document.getElementById('story-management-button');
 
                         const customModal = document.getElementById('custom-modal');
                         const modalTitle = document.getElementById('modal-title');
@@ -353,6 +363,86 @@
                                             clickSound.play();
                                             openMemoriesModal();
                                         });
+
+                                        // Download LLM Logs button event listener
+                                        downloadLogsButton.addEventListener('click', async () => {
+                                            clickSound.play();
+                                            try {
+                                                // Import the logger module and download logs
+                                                const { downloadLogs } = await import('./src/js/logger.js');
+                                                downloadLogs(true); // Include debug logs for complete export
+                                                showModal("Logs Downloaded", "LLM logs have been downloaded successfully!<br><br>Check your browser's <strong>Downloads</strong> folder for the log file.");
+                                            } catch (error) {
+                                                console.error("Failed to download logs:", error);
+                                                showModal("Download Error", "Sorry, there was an error downloading the LLM logs. Please try again.");
+                                            }
+                                        });
+
+                                        // Story Management button event listener
+                                        storyManagementButton.addEventListener('click', () => {
+                                            clickSound.play();
+                                            openStoryManagementModal();
+                                        });
+
+                                        // New function to open and manage the story management modal
+                                        function openStoryManagementModal() {
+                                            modalTitle.textContent = "Story Management";
+                                            modalMessage.innerHTML = `
+                                                <div class="space-y-4">
+                                                    <div class="flex gap-2">
+                                                        <button id="save-logs-button" class="flex-1 bg-green-600 hover:bg-green-500 text-white font-bold py-3 px-4 rounded-lg transition-colors duration-300">
+                                                            <i class="fas fa-file-alt mr-2"></i>Save LLM Logs
+                                                        </button>
+                                                        <button id="export-story-button" class="flex-1 bg-blue-600 hover:bg-blue-500 text-white font-bold py-3 px-4 rounded-lg transition-colors duration-300">
+                                                            <i class="fas fa-download mr-2"></i>Export Story
+                                                        </button>
+                                                    </div>
+                                                    <div class="text-sm text-gray-400 text-center">
+                                                        <p>Story Steps: ${storyLog.length}</p>
+                                                        <p>Actions Taken: ${actionLog.length}</p>
+                                                        <p>Memories: ${memories.length}</p>
+                                                    </div>
+                                                </div>
+                                            `;
+                                            
+                                            // Ensure the close button works as expected for this modal
+                                            modalCloseButton.textContent = 'Close';
+                                            modalCloseButton.onclick = () => {
+                                                clickSound.play();
+                                                modalContentDiv.classList.remove('animate__zoomIn');
+                                                modalContentDiv.classList.add('animate__zoomOut');
+                                                setTimeout(() => {
+                                                    customModal.classList.add('hidden');
+                                                }, 300);
+                                            };
+
+                                            customModal.classList.remove('hidden');
+                                            modalContentDiv.classList.remove('animate__zoomOut');
+                                            modalContentDiv.classList.add('animate__zoomIn');
+
+                                            // Add event listeners for the buttons
+                                            const saveLogsButton = document.getElementById('save-logs-button');
+                                            const exportStoryButton = document.getElementById('export-story-button');
+
+                                            saveLogsButton.addEventListener('click', async () => {
+                                                clickSound.play();
+                                                try {
+                                                    // Import the logger module and download logs
+                                                    const { downloadLogs } = await import('./src/js/logger.js');
+                                                    downloadLogs(true); // Include debug logs for complete export
+                                                    showModal("Logs Saved", "LLM logs have been saved successfully!<br><br>Check your browser's <strong>Downloads</strong> folder for the log file.");
+                                                } catch (error) {
+                                                    console.error("Failed to save logs:", error);
+                                                    showModal("Save Error", "Sorry, there was an error saving the LLM logs. Please try again.");
+                                                }
+                                            });
+
+                                            exportStoryButton.addEventListener('click', () => {
+                                                clickSound.play();
+                                                // Trigger the existing export functionality
+                                                exportButton.click();
+                                            });
+                                        }
 
                                         // New function to open and manage the memories modal
                                         function openMemoriesModal() {
@@ -583,10 +673,12 @@
                                             });
                                             customActionInput.disabled = true;
                                             customActionButton.disabled = true;
-                                            exportButton.disabled = true;
-                                            exportButton.classList.add('opacity-50', 'cursor-not-allowed');
-                                            memoriesButton.disabled = true; // Disable memories button during loading
-                                            memoriesButton.classList.add('opacity-50', 'cursor-not-allowed');
+                                                                                         exportButton.disabled = true;
+                                             exportButton.classList.add('opacity-50', 'cursor-not-allowed');
+                                             memoriesButton.disabled = true; // Disable memories button during loading
+                                             memoriesButton.classList.add('opacity-50', 'cursor-not-allowed');
+                                             storyManagementButton.disabled = true; // Disable story management button during loading
+                                             storyManagementButton.classList.add('opacity-50', 'cursor-not-allowed');
 
                                             updateUI();
 
@@ -673,6 +765,8 @@
                                                     exportButton.classList.remove('opacity-50', 'cursor-not-allowed');
                                                     memoriesButton.disabled = false; // Re-enable memories button
                                                     memoriesButton.classList.remove('opacity-50', 'cursor-not-allowed');
+                                                    storyManagementButton.disabled = false; // Re-enable story management button
+                                                    storyManagementButton.classList.remove('opacity-50', 'cursor-not-allowed');
                                                 }
                                             }
                                         }
@@ -743,6 +837,8 @@
                                                 exportButton.classList.remove('opacity-50', 'cursor-not-allowed');
                                                 memoriesButton.disabled = false; // Re-enable memories button
                                                 memoriesButton.classList.remove('opacity-50', 'cursor-not-allowed');
+                                                storyManagementButton.disabled = false; // Re-enable story management button
+                                                storyManagementButton.classList.remove('opacity-50', 'cursor-not-allowed');
                                                 customActionInput.disabled = false;
                                                 customActionButton.disabled = false;
 

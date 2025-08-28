@@ -7,8 +7,16 @@ import {
     Message 
 } from './types.js';
 import { loadConfig } from './config.js';
-import { logInfo, logDebug, logWarn } from './logger.js';
+import { logInfo, logDebug, logWarn, logError } from './logger.js';
 import { cleanAndParseJson, validateLLMResponse, reconstructMissingFields } from './json-cleaner.js';
+
+/**
+ * Sanitize image data from content by replacing base64 data with placeholder
+ */
+function sanitizeImageData(content: string): string {
+    // Replace base64 image data with placeholder
+    return content.replace(/data:image\/[^;]+;base64,[A-Za-z0-9+/=]+/g, '[Image Data]');
+}
 
 /**
  * Replace window.call_llm with local Ollama implementation
@@ -22,13 +30,10 @@ export async function callLocalLLM(
     messageHistory: Message[], 
     jsonFields: Array<{ name: string; type: string }>
 ): Promise<LLMResponse> {
-    logInfo('Ollama', 'Starting callLocalLLM...');
     const config = await loadConfig();
     const ollamaUrl = config.ollama.url;
     const model = config.ollama.model;
     const options = config.ollama.options;
-    
-    logInfo('Ollama', `Config - URL: ${ollamaUrl}, Model: ${model}`);
 
     // Format messages for Ollama API - use prompt format for better compatibility
     const messages = [
@@ -38,13 +43,20 @@ export async function callLocalLLM(
     
     // Convert messages to a single prompt string with stronger formatting instructions
     const prompt = messages.map(msg => `${msg.role === 'system' ? 'System: ' : 'User: '}${msg.content}`).join('\n\n') + '\n\nAssistant: RESPOND WITH ONLY A COMPLETE JSON OBJECT. NO OTHER TEXT. NO EXPLANATIONS. NO MARKDOWN. JUST THE JSON.';
-    logInfo('Ollama', `Prompt length: ${prompt.length} characters`);
     
     // Log the full prompt for debugging (verbose logging) - DEBUG level only
     logDebug('Ollama', 'Full prompt being sent to LLM:');
     logDebug('Ollama', '='.repeat(80));
     logDebug('Ollama', prompt);
     logDebug('Ollama', '='.repeat(80));
+
+    // Enhanced logging for text export - log everything sent to LLM
+    logInfo('LLM-Request', '=== LLM REQUEST START ===');
+    logInfo('LLM-Request', `System Prompt: ${systemPrompt}`);
+    logInfo('LLM-Request', `Message History: ${JSON.stringify(messageHistory, null, 2)}`);
+    logInfo('LLM-Request', `Expected JSON Fields: ${JSON.stringify(jsonFields, null, 2)}`);
+    logInfo('LLM-Request', `Full Prompt Sent: ${prompt}`);
+    logInfo('LLM-Request', '=== LLM REQUEST END ===');
 
     try {
         logInfo('Ollama', `Making fetch request to: ${ollamaUrl}/api/generate`);
@@ -81,6 +93,12 @@ export async function callLocalLLM(
         const data: OllamaGenerateResponse = await response.json();
         console.log('📡 callLocalLLM: Raw response data:', data);
         
+        // Enhanced logging for text export - log full response (sanitized)
+        logInfo('LLM-Response', '=== LLM RESPONSE START ===');
+        logInfo('LLM-Response', `Raw Response Data: ${sanitizeImageData(JSON.stringify(data, null, 2))}`);
+        logInfo('LLM-Response', `Response Text: ${sanitizeImageData(data.response)}`);
+        logInfo('LLM-Response', '=== LLM RESPONSE END ===');
+        
         if (!data.response) {
             console.error('❌ callLocalLLM: No response field in data:', data);
             throw new Error('No response received from Ollama');
@@ -90,20 +108,49 @@ export async function callLocalLLM(
         logDebug('Ollama', 'Parsing JSON response...');
         let parsedResponse: LLMResponse;
         
+        // Enhanced logging for text export - log processing steps
+        logInfo('LLM-Processing', '=== LLM PROCESSING START ===');
+        logInfo('LLM-Processing', `Starting JSON parsing and cleaning...`);
+        
         const cleanResult = cleanAndParseJson(data.response);
         
+        logInfo('LLM-Processing', `JSON Cleaning Result: ${sanitizeImageData(JSON.stringify(cleanResult, null, 2))}`);
+        
         if (!cleanResult.success) {
+            logError('LLM-Processing', `Failed to parse JSON response: ${cleanResult.error}`);
+            logError('LLM-Processing', `Raw response: ${data.response}`);
+            logError('LLM-Processing', `Cleaned attempt: ${cleanResult.cleaned}`);
             console.error('❌ callLocalLLM: Failed to parse JSON response:', cleanResult.error);
             console.error('❌ callLocalLLM: Raw response:', data.response);
             console.error('❌ callLocalLLM: Cleaned attempt:', cleanResult.cleaned);
-            throw new Error(`Invalid JSON response from LLM: ${cleanResult.error}`);
+            
+            // Try to fix single quote issues by replacing with backticks
+            try {
+                const fixedResponse = data.response.replace(/'/g, '`');
+                logInfo('LLM-Processing', `Attempting to fix single quotes by replacing with backticks...`);
+                const fixedCleanResult = cleanAndParseJson(fixedResponse);
+                
+                if (fixedCleanResult.success) {
+                    logInfo('LLM-Processing', `Successfully parsed JSON after fixing single quotes`);
+                    parsedResponse = fixedCleanResult.json;
+                } else {
+                    throw new Error(`Invalid JSON response from LLM: ${cleanResult.error}`);
+                }
+            } catch (fixError) {
+                throw new Error(`Invalid JSON response from LLM: ${cleanResult.error}`);
+            }
+        } else {
+            parsedResponse = cleanResult.json;
         }
         
         parsedResponse = cleanResult.json;
         
+        logInfo('LLM-Processing', `Successfully parsed JSON: ${sanitizeImageData(JSON.stringify(parsedResponse, null, 2))}`);
+        
         // Log cleaning issues if any
         if (cleanResult.originalIssues && cleanResult.originalIssues.length > 0) {
             logWarn('Ollama', `JSON required cleaning: ${cleanResult.originalIssues.join(', ')}`);
+            logInfo('LLM-Processing', `JSON Cleaning Issues: ${cleanResult.originalIssues.join(', ')}`);
         }
         
         logDebug('Ollama', 'Successfully parsed JSON:', parsedResponse);
@@ -112,19 +159,29 @@ export async function callLocalLLM(
         logDebug('Ollama', `Validating required fields: ${jsonFields.map(f => f.name)}`);
         logDebug('Ollama', `Parsed response keys: ${Object.keys(parsedResponse)}`);
         
+        logInfo('LLM-Processing', `Validating required fields: ${jsonFields.map(f => f.name)}`);
+        logInfo('LLM-Processing', `Parsed response keys: ${Object.keys(parsedResponse)}`);
+        
         const requiredFieldNames = jsonFields.map(f => f.name);
         const validation = validateLLMResponse(parsedResponse, requiredFieldNames);
         
+        logInfo('LLM-Processing', `Validation result: ${JSON.stringify(validation, null, 2)}`);
+        
         if (!validation.valid) {
+            logError('LLM-Processing', `Missing required fields: ${validation.missing}`);
+            logError('LLM-Processing', `Full parsed response: ${JSON.stringify(parsedResponse, null, 2)}`);
+            logError('LLM-Processing', `Raw LLM response: ${data.response}`);
             console.error('❌ callLocalLLM: Missing required fields:', validation.missing);
             console.error('❌ callLocalLLM: Full parsed response:', parsedResponse);
             console.error('❌ callLocalLLM: Raw LLM response:', data.response);
             
             // Attempt to reconstruct missing fields
             logWarn('Ollama', 'Attempting to reconstruct missing fields with fallbacks');
+            logInfo('LLM-Processing', 'Attempting to reconstruct missing fields with fallbacks');
             parsedResponse = reconstructMissingFields(parsedResponse, requiredFieldNames);
             
             logInfo('Ollama', 'Reconstructed response with fallback values');
+            logInfo('LLM-Processing', `Reconstructed response: ${JSON.stringify(parsedResponse, null, 2)}`);
         }
 
         // Validate choices array only if it's expected in the response
@@ -155,6 +212,7 @@ export async function callLocalLLM(
             console.log('📝 callLocalLLM: Choices validation skipped (not expected in this response)');
         }
 
+        logInfo('LLM-Processing', '=== LLM PROCESSING END ===');
         console.log('✅ callLocalLLM: All validation passed, returning response');
         return parsedResponse;
 

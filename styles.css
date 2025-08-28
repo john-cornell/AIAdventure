@@ -42,3 +42,13 @@ body {
 .animate-fade-in {
     animation: fadeIn 0.3s ease-out;
 }
+
+/* Utility classes */
+.hidden {
+    display: none !important;
+}
+
+/* Choice button positioning for edit button */
+.choice-button {
+    position: relative;
+}
